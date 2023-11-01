@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: 'default'
 }
 
-export default class FileUploadCommand extends Plugin {
+export default class AttachmentUpload extends Plugin {
 	settings: MyPluginSettings;
 
 	async onload() {
@@ -108,9 +108,9 @@ class SampleModal extends Modal {
 }
 
 class SampleSettingTab extends PluginSettingTab {
-	plugin: FileUploadCommand;
+	plugin: AttachmentUpload;
 
-	constructor(app: App, plugin: FileUploadCommand) {
+	constructor(app: App, plugin: AttachmentUpload) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
