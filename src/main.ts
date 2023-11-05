@@ -1,57 +1,87 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { exec } from "child_process";
+import {
+	App,
+	Editor,
+	MarkdownView,
+	Modal,
+	Notice,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	FileSystemAdapter,
+	normalizePath,
+	MarkdownFileInfo,
+} from "obsidian";
 
-// Remember to rename these classes and interfaces!
+import { join, parse, resolve } from "path";
+import { format, promisify } from "util";
 
-interface MyPluginSettings {
-	mySetting: string;
+interface PluginSettings {
+	uploadService: string;
+	uploadCommand: string;
+	testFilePath: string;
+	fileFormatWhitelist: string;
 }
-
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+interface Attachment {
+	basename: string;
+	alt: string;
+	name: string;
+	ext: string;
+	source: string;
+	existenceState: string; //"network" | "local" | "missing"
+	inVaultPath: string;
+	inSystemPath: string;
 }
+interface uploadCommandDict {
+	[service: string]: string;
+}
+const uploadCommandDict: uploadCommandDict = {
+	uPic: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
+	custom: "your custom command here",
+	imgur: "imgur uploader command",
+};
+const DEFAULT_SETTINGS: PluginSettings = {
+	uploadService: "uPic",
+	uploadCommand: "ddd",
+	fileFormatWhitelist: ".png",
+	testFilePath: "",
+};
 
 export default class AttachmentUpload extends Plugin {
-	settings: MyPluginSettings;
+	settings: PluginSettings;
 
 	async onload() {
+		console.log("d");
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
+		const ribbonIconEl = this.addRibbonIcon(
+			"upload",
+			"Upload Attachments",
+			(evt: MouseEvent) => {
+				this.uploadEditorAttachment();
+				new Notice("替换完成");
 			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
+		);
+		// Perform additional things with the ribbon
+		ribbonIconEl.addClass("my-plugin-ribbon-class");
+
 		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
+			id: "sample-editor-command",
+			name: "Sample editor command",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
+				editor.replaceSelection(String(this.uploadEditorAttachment()));
+				this.uploadEditorAttachment();
+			},
 		});
 		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
+			id: "open-sample-modal-complex",
+			name: "Open sample modal (complex)",
 			checkCallback: (checking: boolean) => {
+				this.uploadEditorAttachment();
 				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+				const markdownView =
+					this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (markdownView) {
 					// If checking is true, we're simply "checking" if the command can be run.
 					// If checking is false, then we want to actually perform the operation.
@@ -62,28 +92,114 @@ export default class AttachmentUpload extends Plugin {
 					// This command will only show up in Command Palette when the check function returns true
 					return true;
 				}
-			}
+			},
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
-	onunload() {
-
+	private uploadEditorAttachment() {
+		const currentDate = new Date();
+		console.log(String(currentDate));
+		const activeEditor = this.app.workspace.activeEditor;
+		if (activeEditor) {
+			const attachments = this.getEditorAttachments(activeEditor);
+			attachments.forEach(async (attachment) => {
+				console.log(attachment.inSystemPath);
+				if (attachment.existenceState === "missing") {
+					return;
+				}
+				if (attachment.existenceState === "network") {
+					return;
+				}
+				if (attachment.existenceState === "local") {
+					console.log(attachment.inSystemPath);
+					const uploadUrl = await this.uploadServe(
+						attachment.inSystemPath
+					);
+					console.log(uploadUrl);
+					activeEditor?.editor?.setValue(
+						activeEditor?.editor
+							?.getValue()
+							.replace(
+								attachment.source,
+								`![${attachment.alt}](${uploadUrl})`
+							)
+					);
+				}
+			});
+		}
 	}
+	/** 匹配文章内的附件信息
+	 * @param markdownFile 当 markdown 文件
+	 */
+	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
+		const attachments: Attachment[] = [];
+		const regex = /!\[(.*?)\]\((.*?)\)/g;
+		const matches = markdownFile?.editor?.getValue().match(regex);
+		const vaultSystemPath = (
+			markdownFile?.file?.vault.adapter as FileSystemAdapter
+		).getBasePath();
+		if (matches) {
+			matches.forEach((match) => {
+				const attSourcePath = match.match(/\((.*?)\)/)?.[1];
+				const alt = match.match(/\[(.*?)\]/)?.[1];
+				if (attSourcePath) {
+					const file = parse(normalizePath(decodeURI(attSourcePath)));
+					const searchFile = this.app.vault
+						.getFiles()
+						.find(
+							(f) => f.name === file.name + file.ext.toLowerCase()
+						);
+					const attachment = {
+						source: match,
+						alt: alt ? alt : file.name,
+						basename: file.base,
+						name: file.name,
+						ext: file.ext,
+						existenceState: attSourcePath.startsWith("http")
+							? "network"
+							: searchFile
+							? "local"
+							: "missing",
+						inVaultPath: searchFile
+							? encodeURI(searchFile?.path)
+							: encodeURI(resolve(attSourcePath)),
+						inSystemPath: searchFile
+							? encodeURI(join(vaultSystemPath, searchFile?.path))
+							: encodeURI(resolve(attSourcePath)),
+					};
+					attachments.push(attachment);
+				}
+			});
+		}
+		return attachments;
+	}
+	/** 上传命令执行后从shell输出中提取上传后的链接
+	 * @param path  要上传的文件在系统内的路径
+	 */
+	async uploadServe(path: string): Promise<string> {
+		const execPromise = promisify(exec);
+		const command = format(this.settings.uploadCommand, path);
+		try {
+			const { stdout } = await execPromise(command);
+			const urlMatch = stdout.match(/\s+(https?:\/\/\S+)/);
+			return urlMatch ? urlMatch?.[1] : stdout;
+		} catch (err) {
+			console.error(`err: ${err}`);
+			throw err;
+		}
+	}
+
+	onunload() {}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
@@ -97,12 +213,12 @@ class SampleModal extends Modal {
 	}
 
 	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
+		const { contentEl } = this;
+		contentEl.setText("Woah!");
 	}
 
 	onClose() {
-		const {contentEl} = this;
+		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
@@ -116,19 +232,76 @@ class SampleSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
+		containerEl.createEl("h1", { text: "上传命令" });
+		new Setting(containerEl)
+			.setName("上传服务")
+			.setDesc("请选择")
+			.addDropdown((dropdown) => {
+				dropdown.addOptions({
+					uPic: "uPic",
+					custom: "custom",
+				});
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.uploadService = value;
+					this.display();
+					await this.plugin.saveSettings();
+				});
+				dropdown.setValue(this.plugin.settings.uploadService);
+				// dropdown.selectEl.style.width = "100%";
+			});
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName("执行命令")
+			.setDesc(
+				"命令通过child_process的exec方法执行; %s为要上传文件的路径,请保留; 执行后从shell输出中提取上传后的链接,‘urlMatch = stdout.match(/s+(https?:/ / S +) /)’"
+			)
+			.addTextArea((textArea) => {
+				textArea
+					.setPlaceholder("Enter your secret")
+					.setValue(
+						uploadCommandDict[this.plugin.settings.uploadService]
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.uploadCommand = value;
+						await this.plugin.saveSettings();
+					})
+					.setDisabled(
+						this.plugin.settings.uploadService !== "custom"
+					);
+				textArea.inputEl.style.height = "80px";
+				// textArea.inputEl.style.width = "100%";
+			});
+		new Setting(containerEl).setName("测试文件路径").addText((text) => {
+			text.onChange(async (value) => {
+				this.plugin.settings.testFilePath = value;
+			});
+			new Setting(containerEl).addButton((btn) => {
+				btn.setButtonText("上传测试").onClick(async () => {
+					// const uploadUrl = await this.plugin.uploadServe(
+					// 	this.plugin.settings.testFilePath
+					// );
+					new Notice(this.plugin.settings.uploadCommand);
+				});
+			});
+		});
+
+		containerEl.createEl("h1", { text: "上传规则" });
+		new Setting(containerEl)
+			.setName("上传内容格式")
+			.setDesc("配置内的文件格式，会在执行命令时被上传并替换原地址")
+			.addTextArea((textArea) => {
+				textArea
+					.setPlaceholder("Enter your secret")
+					.setValue(this.plugin.settings.fileFormatWhitelist)
+					.onChange(async (value) => {
+						this.plugin.settings.fileFormatWhitelist = value;
+						await this.plugin.saveSettings();
+					});
+				textArea.inputEl.style.height = "120px";
+				// textArea.inputEl.style.width = "100%";
+			});
 	}
 }

@@ -1,6 +1,6 @@
 {
-	"id": "Obsidian-File-Upload-Command",
-	"name": "File Upload Command",
+	"id": "Obsidian-Attachment-Upload-Command",
+	"name": "Attachment Upload",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "This is a sample plugin for Obsidian. This plugin demonstrates some of the capabilities of the Obsidian API.",
