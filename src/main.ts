@@ -16,12 +16,6 @@ import {
 import { join, parse, resolve } from "path";
 import { format, promisify } from "util";
 
-interface PluginSettings {
-	uploadService: string;
-	uploadCommand: string;
-	testFilePath: string;
-	fileFormatWhitelist: string;
-}
 interface Attachment {
 	basename: string;
 	alt: string;
@@ -31,6 +25,12 @@ interface Attachment {
 	existenceState: string; //"network" | "local" | "missing"
 	inVaultPath: string;
 	inSystemPath: string;
+}
+interface PluginSettings {
+	uploadService: string;
+	uploadCommand: string;
+	testFilePath: string;
+	fileFormatWhitelist: string;
 }
 interface uploadCommandDict {
 	[service: string]: string;
@@ -42,7 +42,7 @@ const uploadCommandDict: uploadCommandDict = {
 };
 const DEFAULT_SETTINGS: PluginSettings = {
 	uploadService: "uPic",
-	uploadCommand: "ddd",
+	uploadCommand: uploadCommandDict.uPic,
 	fileFormatWhitelist: ".png",
 	testFilePath: "",
 };
@@ -51,8 +51,10 @@ export default class AttachmentUpload extends Plugin {
 	settings: PluginSettings;
 
 	async onload() {
-		console.log("d");
+		const currentDate = new Date();
+		console.log(String(currentDate));
 		await this.loadSettings();
+
 		const ribbonIconEl = this.addRibbonIcon(
 			"upload",
 			"Upload Attachments",
@@ -68,7 +70,6 @@ export default class AttachmentUpload extends Plugin {
 			id: "sample-editor-command",
 			name: "Sample editor command",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
 				editor.replaceSelection(String(this.uploadEditorAttachment()));
 				this.uploadEditorAttachment();
 			},
@@ -96,12 +97,10 @@ export default class AttachmentUpload extends Plugin {
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
 	private uploadEditorAttachment() {
-		const currentDate = new Date();
-		console.log(String(currentDate));
 		const activeEditor = this.app.workspace.activeEditor;
 		if (activeEditor) {
 			const attachments = this.getEditorAttachments(activeEditor);
@@ -114,11 +113,9 @@ export default class AttachmentUpload extends Plugin {
 					return;
 				}
 				if (attachment.existenceState === "local") {
-					console.log(attachment.inSystemPath);
 					const uploadUrl = await this.uploadServe(
 						attachment.inSystemPath
 					);
-					console.log(uploadUrl);
 					activeEditor?.editor?.setValue(
 						activeEditor?.editor
 							?.getValue()
@@ -181,6 +178,7 @@ export default class AttachmentUpload extends Plugin {
 	 */
 	async uploadServe(path: string): Promise<string> {
 		const execPromise = promisify(exec);
+		console.log(this.settings.uploadCommand);
 		const command = format(this.settings.uploadCommand, path);
 		try {
 			const { stdout } = await execPromise(command);
@@ -191,12 +189,9 @@ export default class AttachmentUpload extends Plugin {
 			throw err;
 		}
 	}
-
-	onunload() {}
-
 	async loadSettings() {
 		this.settings = Object.assign(
-			{},
+			// {},
 			DEFAULT_SETTINGS,
 			await this.loadData()
 		);
@@ -205,6 +200,8 @@ export default class AttachmentUpload extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	onunload() {}
 }
 
 class SampleModal extends Modal {
@@ -223,7 +220,7 @@ class SampleModal extends Modal {
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
+class SettingTab extends PluginSettingTab {
 	plugin: AttachmentUpload;
 
 	constructor(app: App, plugin: AttachmentUpload) {
@@ -233,8 +230,8 @@ class SampleSettingTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
-
 		containerEl.empty();
+
 		containerEl.createEl("h1", { text: "上传命令" });
 		new Setting(containerEl)
 			.setName("上传服务")
@@ -260,7 +257,6 @@ class SampleSettingTab extends PluginSettingTab {
 			)
 			.addTextArea((textArea) => {
 				textArea
-					.setPlaceholder("Enter your secret")
 					.setValue(
 						uploadCommandDict[this.plugin.settings.uploadService]
 					)
@@ -272,18 +268,18 @@ class SampleSettingTab extends PluginSettingTab {
 						this.plugin.settings.uploadService !== "custom"
 					);
 				textArea.inputEl.style.height = "80px";
-				// textArea.inputEl.style.width = "100%";
 			});
 		new Setting(containerEl).setName("测试文件路径").addText((text) => {
 			text.onChange(async (value) => {
 				this.plugin.settings.testFilePath = value;
 			});
+
 			new Setting(containerEl).addButton((btn) => {
 				btn.setButtonText("上传测试").onClick(async () => {
-					// const uploadUrl = await this.plugin.uploadServe(
-					// 	this.plugin.settings.testFilePath
-					// );
-					new Notice(this.plugin.settings.uploadCommand);
+					const uploadUrl = await this.plugin.uploadServe(
+						this.plugin.settings.testFilePath
+					);
+					new Notice(uploadUrl);
 				});
 			});
 		});
@@ -295,13 +291,12 @@ class SampleSettingTab extends PluginSettingTab {
 			.addTextArea((textArea) => {
 				textArea
 					.setPlaceholder("Enter your secret")
-					.setValue(this.plugin.settings.fileFormatWhitelist)
 					.onChange(async (value) => {
 						this.plugin.settings.fileFormatWhitelist = value;
 						await this.plugin.saveSettings();
-					});
+					})
+					.setValue(this.plugin.settings.fileFormatWhitelist);
 				textArea.inputEl.style.height = "120px";
-				// textArea.inputEl.style.width = "100%";
 			});
 	}
 }
