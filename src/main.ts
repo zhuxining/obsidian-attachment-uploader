@@ -12,7 +12,7 @@ import {
 	MarkdownFileInfo,
 } from "obsidian";
 
-import { join, parse, resolve } from "path";
+import { join, parse } from "path";
 import { format, promisify } from "util";
 
 interface Attachment {
@@ -29,7 +29,8 @@ interface PluginSettings {
 	uploadService: string;
 	uploadCommand: string;
 	testFilePath: string;
-	fileFormatWhitelist: string;
+	uploadFileFormat: string;
+	isDeleteSourceFile: boolean;
 }
 interface uploadCommandDict {
 	[service: string]: string;
@@ -42,18 +43,16 @@ const uploadCommandDict: uploadCommandDict = {
 const DEFAULT_SETTINGS: PluginSettings = {
 	uploadService: "uPic",
 	uploadCommand: uploadCommandDict.uPic,
-	fileFormatWhitelist: ".png",
+	uploadFileFormat: ".png\n.jpg\n.jpeg\n.gif\n.webp\n.ico\n.svg\n.bmp",
 	testFilePath: "",
+	isDeleteSourceFile: false,
 };
 
-export default class AttachmentUpload extends Plugin {
+export default class AttachmentUploader extends Plugin {
 	settings: PluginSettings;
 
 	async onload() {
-		// const currentDate = new Date();
-		// console.log(String(currentDate));
 		await this.loadSettings();
-
 		const ribbonIconEl = this.addRibbonIcon(
 			"upload",
 			"Upload Attachments",
@@ -64,8 +63,8 @@ export default class AttachmentUpload extends Plugin {
 		ribbonIconEl.addClass("ribbon-class");
 
 		this.addCommand({
-			id: "upload-editor-attachment",
-			name: "Upload editor attachment",
+			id: "upload-editor-attachments",
+			name: "Upload editor attachments",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				this.uploadEditorAttachment();
 			},
@@ -78,41 +77,20 @@ export default class AttachmentUpload extends Plugin {
 		const activeEditor = this.app.workspace.activeEditor;
 		if (activeEditor) {
 			const attachments = this.getEditorAttachments(activeEditor);
-			const countExistenceState = attachments.reduce(
-				(acc: Record<string, number>, attachment) => {
-					if (!acc[attachment.existenceState]) {
-						acc[attachment.existenceState] = 0;
-					}
-					acc[attachment.existenceState]++;
-					return acc;
-				},
-				{}
-			);
 			new Notice(
-				(countExistenceState["local"]
-					? countExistenceState["local"]
-					: 0) +
-					"个本地附件\n" +
-					(countExistenceState["network"]
-						? countExistenceState["network"]
-						: 0) +
-					"个网络附件\n" +
-					(countExistenceState["missing"]
-						? countExistenceState["missing"]
-						: 0) +
-					"个未创建附件\n"
+				attachments.length > 0
+					? `已找到${attachments.length}个符合上传条件的附件\n开始上传替换…`
+					: "未找到符合上传条件本地附件\n"
 			);
 			attachments.forEach(async (attachment) => {
-				if (attachment.existenceState === "missing") {
-					return;
-				}
-				if (attachment.existenceState === "network") {
-					return;
-				}
-				if (attachment.existenceState === "local") {
-					const uploadResult = await this.uploadServe(
-						attachment.inSystemPath
-					);
+				const sourceFile = this.app.vault.getAbstractFileByPath(
+					attachment.inVaultPath
+				);
+				console.log(attachment.inVaultPath);
+				const uploadResult = await this.uploadServe(
+					attachment.inSystemPath
+				);
+				if (uploadResult.success) {
 					activeEditor?.editor?.setValue(
 						activeEditor?.editor
 							?.getValue()
@@ -121,12 +99,28 @@ export default class AttachmentUpload extends Plugin {
 								`![${attachment.alt}](${uploadResult.url})`
 							)
 					);
+					if (this.settings.isDeleteSourceFile && sourceFile) {
+						this.app.vault.delete(sourceFile);
+					}
+					new Notice(
+						`已上传附件：${attachment.inVaultPath}\n替换地址为:${
+							uploadResult.url
+						}\n${
+							this.settings.isDeleteSourceFile && sourceFile
+								? `本地附件已删除`
+								: ""
+						}`
+					);
+				} else {
+					new Notice(
+						`上传失败：${attachment.inVaultPath}\n\n错误信息:\n${uploadResult.errorMessage}`
+					);
 				}
 			});
 		}
 	}
 	/** 匹配文章内的附件信息
-	 * @param markdownFile 当 markdown 文件
+	 * @param markdownFile  markdown 文件
 	 */
 	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
 		const attachments: Attachment[] = [];
@@ -141,17 +135,11 @@ export default class AttachmentUpload extends Plugin {
 				const alt = match.match(/\[(.*?)\]/)?.[1];
 				if (attSourcePath) {
 					const file = parse(normalizePath(decodeURI(attSourcePath)));
-					// TODO 改用getAbstractFileByPath方法
-					console.log(file.base);
-					console.log(attSourcePath);
-					const searchFile = this.app.vault.getAbstractFileByPath(
-						normalizePath(decodeURI(attSourcePath))
-					);
-					console.log(searchFile?.name);
-					// .getFiles()
-					// .find(
-					// 	(f) => f.name === file.name + file.ext.toLowerCase()
-					// );
+					const searchFile = this.app.vault
+						.getFiles()
+						.find(
+							(f) => f.name === file.name + file.ext.toLowerCase()
+						);
 					const attachment = {
 						source: match,
 						alt: alt ? alt : file.name,
@@ -164,13 +152,21 @@ export default class AttachmentUpload extends Plugin {
 							? "local"
 							: "missing",
 						inVaultPath: searchFile
-							? encodeURI(searchFile?.path)
-							: encodeURI(resolve(attSourcePath)),
+							? searchFile?.path
+							: normalizePath(attSourcePath),
 						inSystemPath: searchFile
 							? encodeURI(join(vaultSystemPath, searchFile?.path))
-							: encodeURI(resolve(attSourcePath)),
+							: encodeURI(normalizePath(attSourcePath)),
 					};
-					attachments.push(attachment);
+
+					if (
+						this.settings.uploadFileFormat
+							.split("\n")
+							.includes(attachment.ext.toLowerCase()) &&
+						attachment.existenceState === "local"
+					) {
+						attachments.push(attachment);
+					}
 				}
 			});
 		}
@@ -221,9 +217,9 @@ export default class AttachmentUpload extends Plugin {
 }
 
 class SettingTab extends PluginSettingTab {
-	plugin: AttachmentUpload;
+	plugin: AttachmentUploader;
 
-	constructor(app: App, plugin: AttachmentUpload) {
+	constructor(app: App, plugin: AttachmentUploader) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -243,11 +239,11 @@ class SettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.uploadService)
 				.onChange(async (value) => {
 					this.plugin.settings.uploadService = value;
+					this.plugin.settings.uploadCommand =
+						uploadCommandDict[this.plugin.settings.uploadService];
 					this.display();
 					await this.plugin.saveSettings();
 				});
-
-			// dropdown.selectEl.style.width = "100%";
 		});
 
 		new Setting(containerEl)
@@ -268,12 +264,14 @@ class SettingTab extends PluginSettingTab {
 					.setDisabled(
 						this.plugin.settings.uploadService !== "custom"
 					);
+
 				textArea.inputEl.style.height = "80px";
 			});
 
 		new Setting(containerEl).setName("测试文件路径").addText((text) => {
 			text.onChange(async (value) => {
 				this.plugin.settings.testFilePath = value;
+				await this.plugin.saveSettings();
 			});
 			new Setting(containerEl).addButton((btn) => {
 				btn.setButtonText("上传测试").onClick(async () => {
@@ -296,16 +294,28 @@ class SettingTab extends PluginSettingTab {
 		containerEl.createEl("h1", { text: "上传规则" });
 		new Setting(containerEl)
 			.setName("上传内容格式")
-			.setDesc("配置内的文件格式，会在执行命令时被上传并替换原地址")
+			.setDesc(
+				"配置内格式的文件，会在执行命令时被上传并替换原地址，以回车分割"
+			)
 			.addTextArea((textArea) => {
 				textArea
-					.setPlaceholder("Enter your secret")
+					.setValue(this.plugin.settings.uploadFileFormat)
 					.onChange(async (value) => {
-						this.plugin.settings.fileFormatWhitelist = value;
+						this.plugin.settings.uploadFileFormat = value;
 						await this.plugin.saveSettings();
-					})
-					.setValue(this.plugin.settings.fileFormatWhitelist);
+					});
 				textArea.inputEl.style.height = "120px";
+			});
+
+		new Setting(containerEl)
+			.setName("上传成功后删除本地文件")
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.isDeleteSourceFile)
+					.onChange(async (value) => {
+						this.plugin.settings.isDeleteSourceFile = value;
+						await this.plugin.saveSettings();
+					});
 			});
 	}
 }
