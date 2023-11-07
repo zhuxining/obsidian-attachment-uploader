@@ -3,7 +3,6 @@ import {
 	App,
 	Editor,
 	MarkdownView,
-	Modal,
 	Notice,
 	Plugin,
 	PluginSettingTab,
@@ -37,8 +36,8 @@ interface uploadCommandDict {
 }
 const uploadCommandDict: uploadCommandDict = {
 	uPic: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
-	custom: "your custom command here",
-	imgur: "imgur uploader command",
+	Picsee: "/Applications/Picsee.app/Contents/MacOS/Picsee -u %s",
+	custom: "",
 };
 const DEFAULT_SETTINGS: PluginSettings = {
 	uploadService: "uPic",
@@ -51,8 +50,8 @@ export default class AttachmentUpload extends Plugin {
 	settings: PluginSettings;
 
 	async onload() {
-		const currentDate = new Date();
-		console.log(String(currentDate));
+		// const currentDate = new Date();
+		// console.log(String(currentDate));
 		await this.loadSettings();
 
 		const ribbonIconEl = this.addRibbonIcon(
@@ -60,43 +59,18 @@ export default class AttachmentUpload extends Plugin {
 			"Upload Attachments",
 			(evt: MouseEvent) => {
 				this.uploadEditorAttachment();
-				new Notice("替换完成");
 			}
 		);
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass("my-plugin-ribbon-class");
+		ribbonIconEl.addClass("ribbon-class");
 
 		this.addCommand({
-			id: "sample-editor-command",
-			name: "Sample editor command",
+			id: "upload-editor-attachment",
+			name: "Upload editor attachment",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection(String(this.uploadEditorAttachment()));
 				this.uploadEditorAttachment();
 			},
 		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: "open-sample-modal-complex",
-			name: "Open sample modal (complex)",
-			checkCallback: (checking: boolean) => {
-				this.uploadEditorAttachment();
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
@@ -104,8 +78,31 @@ export default class AttachmentUpload extends Plugin {
 		const activeEditor = this.app.workspace.activeEditor;
 		if (activeEditor) {
 			const attachments = this.getEditorAttachments(activeEditor);
+			const countExistenceState = attachments.reduce(
+				(acc: Record<string, number>, attachment) => {
+					if (!acc[attachment.existenceState]) {
+						acc[attachment.existenceState] = 0;
+					}
+					acc[attachment.existenceState]++;
+					return acc;
+				},
+				{}
+			);
+			new Notice(
+				(countExistenceState["local"]
+					? countExistenceState["local"]
+					: 0) +
+					"个本地附件\n" +
+					(countExistenceState["network"]
+						? countExistenceState["network"]
+						: 0) +
+					"个网络附件\n" +
+					(countExistenceState["missing"]
+						? countExistenceState["missing"]
+						: 0) +
+					"个未创建附件\n"
+			);
 			attachments.forEach(async (attachment) => {
-				console.log(attachment.inSystemPath);
 				if (attachment.existenceState === "missing") {
 					return;
 				}
@@ -113,7 +110,7 @@ export default class AttachmentUpload extends Plugin {
 					return;
 				}
 				if (attachment.existenceState === "local") {
-					const uploadUrl = await this.uploadServe(
+					const uploadResult = await this.uploadServe(
 						attachment.inSystemPath
 					);
 					activeEditor?.editor?.setValue(
@@ -121,7 +118,7 @@ export default class AttachmentUpload extends Plugin {
 							?.getValue()
 							.replace(
 								attachment.source,
-								`![${attachment.alt}](${uploadUrl})`
+								`![${attachment.alt}](${uploadResult.url})`
 							)
 					);
 				}
@@ -144,11 +141,17 @@ export default class AttachmentUpload extends Plugin {
 				const alt = match.match(/\[(.*?)\]/)?.[1];
 				if (attSourcePath) {
 					const file = parse(normalizePath(decodeURI(attSourcePath)));
-					const searchFile = this.app.vault
-						.getFiles()
-						.find(
-							(f) => f.name === file.name + file.ext.toLowerCase()
-						);
+					// TODO 改用getAbstractFileByPath方法
+					console.log(file.base);
+					console.log(attSourcePath);
+					const searchFile = this.app.vault.getAbstractFileByPath(
+						normalizePath(decodeURI(attSourcePath))
+					);
+					console.log(searchFile?.name);
+					// .getFiles()
+					// .find(
+					// 	(f) => f.name === file.name + file.ext.toLowerCase()
+					// );
 					const attachment = {
 						source: match,
 						alt: alt ? alt : file.name,
@@ -176,22 +179,35 @@ export default class AttachmentUpload extends Plugin {
 	/** 上传命令执行后从shell输出中提取上传后的链接
 	 * @param path  要上传的文件在系统内的路径
 	 */
-	async uploadServe(path: string): Promise<string> {
+	async uploadServe(
+		path: string
+	): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
 		console.log(this.settings.uploadCommand);
 		const command = format(this.settings.uploadCommand, path);
 		try {
 			const { stdout } = await execPromise(command);
 			const urlMatch = stdout.match(/\s+(https?:\/\/\S+)/);
-			return urlMatch ? urlMatch?.[1] : stdout;
+			if (urlMatch) {
+				return {
+					success: true,
+					url: urlMatch[1],
+				};
+			} else {
+				return {
+					success: false,
+					errorMessage: stdout,
+				};
+			}
 		} catch (err) {
 			console.error(`err: ${err}`);
+			new Notice(err.message);
 			throw err;
 		}
 	}
 	async loadSettings() {
 		this.settings = Object.assign(
-			// {},
+			{},
 			DEFAULT_SETTINGS,
 			await this.loadData()
 		);
@@ -202,22 +218,6 @@ export default class AttachmentUpload extends Plugin {
 	}
 
 	onunload() {}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText("Woah!");
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
 }
 
 class SettingTab extends PluginSettingTab {
@@ -233,22 +233,22 @@ class SettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		containerEl.createEl("h1", { text: "上传命令" });
-		new Setting(containerEl)
-			.setName("上传服务")
-			.setDesc("请选择")
-			.addDropdown((dropdown) => {
-				dropdown.addOptions({
+		new Setting(containerEl).setName("上传服务").addDropdown((dropdown) => {
+			return dropdown
+				.addOptions({
 					uPic: "uPic",
+					Picsee: "Picsee",
 					custom: "custom",
-				});
-				dropdown.onChange(async (value) => {
+				})
+				.setValue(this.plugin.settings.uploadService)
+				.onChange(async (value) => {
 					this.plugin.settings.uploadService = value;
 					this.display();
 					await this.plugin.saveSettings();
 				});
-				dropdown.setValue(this.plugin.settings.uploadService);
-				// dropdown.selectEl.style.width = "100%";
-			});
+
+			// dropdown.selectEl.style.width = "100%";
+		});
 
 		new Setting(containerEl)
 			.setName("执行命令")
@@ -257,6 +257,7 @@ class SettingTab extends PluginSettingTab {
 			)
 			.addTextArea((textArea) => {
 				textArea
+					.setPlaceholder("请输入")
 					.setValue(
 						uploadCommandDict[this.plugin.settings.uploadService]
 					)
@@ -269,17 +270,25 @@ class SettingTab extends PluginSettingTab {
 					);
 				textArea.inputEl.style.height = "80px";
 			});
+
 		new Setting(containerEl).setName("测试文件路径").addText((text) => {
 			text.onChange(async (value) => {
 				this.plugin.settings.testFilePath = value;
 			});
-
 			new Setting(containerEl).addButton((btn) => {
 				btn.setButtonText("上传测试").onClick(async () => {
-					const uploadUrl = await this.plugin.uploadServe(
+					if (!this.plugin.settings.testFilePath) {
+						new Notice("请填写测试文件路径");
+						return;
+					}
+					const uploadResult = await this.plugin.uploadServe(
 						this.plugin.settings.testFilePath
 					);
-					new Notice(uploadUrl);
+					new Notice(
+						uploadResult.success
+							? "上传成功\n"
+							: "上传失败\n" + uploadResult.errorMessage
+					);
 				});
 			});
 		});
