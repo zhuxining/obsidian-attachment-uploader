@@ -6,6 +6,5 @@
 	"description": "This is an attachment uploader plugin for Obsidian",
 	"author": "zhuxining",
 	"authorUrl": "https://github.com/zhuxining/obsidian-attachment-uploader",
-	"fundingUrl": "https://obsidian.md/pricing",
 	"isDesktopOnly": true
 }

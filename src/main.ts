@@ -53,6 +53,7 @@ export default class AttachmentUploader extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		// 侧栏上传按钮
 		const ribbonIconEl = this.addRibbonIcon(
 			"upload",
 			"Upload Attachments",
@@ -72,7 +73,9 @@ export default class AttachmentUploader extends Plugin {
 
 		this.addSettingTab(new SettingTab(this.app, this));
 	}
-
+	/**
+	 * 上传编辑器内符合条件的附件
+	 */
 	private uploadEditorAttachment() {
 		const activeEditor = this.app.workspace.activeEditor;
 		if (activeEditor) {
@@ -83,14 +86,16 @@ export default class AttachmentUploader extends Plugin {
 					: "未找到符合上传条件本地附件\n"
 			);
 			attachments.forEach(async (attachment) => {
+				// 获取附件在vault中的路径，配置需要删除时传入文件删除文件
 				const sourceFile = this.app.vault.getAbstractFileByPath(
 					attachment.inVaultPath
 				);
-				console.log(attachment.inVaultPath);
+				// 调用上传服务进行上传
 				const uploadResult = await this.uploadServe(
 					attachment.inSystemPath
 				);
 				if (uploadResult.success) {
+					// 更新编辑器中的内容，将源文件地址替换为上传后附件的网络地址
 					activeEditor?.editor?.setValue(
 						activeEditor?.editor
 							?.getValue()
@@ -99,6 +104,7 @@ export default class AttachmentUploader extends Plugin {
 								`![${attachment.alt}](${uploadResult.url})`
 							)
 					);
+					// 如果设置为删除源文件且源文件存在，则删除源文件
 					if (this.settings.isDeleteSourceFile && sourceFile) {
 						this.app.vault.delete(sourceFile);
 					}
@@ -119,60 +125,72 @@ export default class AttachmentUploader extends Plugin {
 			});
 		}
 	}
-	/** 匹配文章内的附件信息
-	 * @param markdownFile  markdown 文件
+	/**
+	 * 获取编辑器中的附件信息
+	 *
+	 * @param markdownFile - Markdown文件信息对象
+	 * @returns 附件数组
 	 */
 	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
 		const attachments: Attachment[] = [];
-		const regex = /!\[(.*?)\]\((.*?)\)/g;
-		const matches = markdownFile?.editor?.getValue().match(regex);
+		const regex = /!\[(.*?)\]\((.*?)\)/g; // 用于匹配Markdown格式的图片链接的正则表达式
+		const matches = markdownFile?.editor?.getValue().match(regex); // 从编辑器中获取Markdown文件的内容，并使用正则表达式匹配图片链接
+		// 获取文件所在的vault路径
 		const vaultSystemPath = (
 			markdownFile?.file?.vault.adapter as FileSystemAdapter
 		).getBasePath();
+
 		if (matches) {
 			matches.forEach((match) => {
-				const attSourcePath = match.match(/\((.*?)\)/)?.[1];
-				const alt = match.match(/\[(.*?)\]/)?.[1];
+				const attSourcePath = match.match(/\((.*?)\)/)?.[1]; // 从匹配结果中提取图片链接的路径部分
+				const alt = match.match(/\[(.*?)\]/)?.[1]; // 从匹配结果中提取图片的alt文本
+
 				if (attSourcePath) {
+					// 将图片链接路径进行解码、规范化和解析，得到文件的信息
 					const file = parse(normalizePath(decodeURI(attSourcePath)));
+					// 在Vault中查找与该文件名称和扩展名匹配的文件
 					const searchFile = this.app.vault
 						.getFiles()
 						.find(
 							(f) => f.name === file.name + file.ext.toLowerCase()
 						);
+
 					const attachment = {
 						source: match,
-						alt: alt ? alt : file.name,
+						alt: alt ? alt : file.name, // 如果有指定alt文本，则使用指定的alt文本，否则使用文件名称作为alt文本
 						basename: file.base,
 						name: file.name,
 						ext: file.ext,
 						existenceState: attSourcePath.startsWith("http")
-							? "network"
+							? "network" // 图片链接是网络地址
 							: searchFile
-							? "local"
-							: "missing",
+							? "local" // 图片链接是本地地址
+							: "missing", // 图片链接未找到
 						inVaultPath: searchFile
 							? searchFile?.path
-							: normalizePath(attSourcePath),
+							: normalizePath(attSourcePath), // 在Vault中找到对应的文件获取其Vault路径，否则为绝为原附件路径/图片网络链接
 						inSystemPath: searchFile
-							? encodeURI(join(vaultSystemPath, searchFile?.path))
+							? encodeURI(join(vaultSystemPath, searchFile?.path)) // 如果找到对应的文件，则拼接出系统路径，否则为原附件路径/图片网络链接
 							: encodeURI(normalizePath(attSourcePath)),
 					};
 
 					if (
 						this.settings.uploadFileFormat
 							.split("\n")
-							.includes(attachment.ext.toLowerCase()) &&
-						attachment.existenceState === "local"
+							.includes(attachment.ext.toLowerCase()) && // 检查文件扩展名是否在允许上传的文件格式中
+						attachment.existenceState === "local" // 检查图片链接是否存在本地
 					) {
-						attachments.push(attachment);
+						attachments.push(attachment); // 将符合条件的附件添加到附件数组中
 					}
 				}
 			});
 		}
-		return attachments;
+
+		return attachments; // 返回附件数组
 	}
+
 	/** 上传命令执行后从shell输出中提取上传后的链接
+	 *
 	 * @param path  要上传的文件在系统内的路径
 	 */
 	async uploadServe(
@@ -180,6 +198,7 @@ export default class AttachmentUploader extends Plugin {
 	): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
 		console.log(this.settings.uploadCommand);
+		// 构建shell命令
 		const command = format(this.settings.uploadCommand, path);
 		try {
 			const { stdout } = await execPromise(command);
@@ -304,7 +323,7 @@ class SettingTab extends PluginSettingTab {
 						this.plugin.settings.uploadFileFormat = value;
 						await this.plugin.saveSettings();
 					});
-				textArea.inputEl.style.height = "120px";
+				textArea.inputEl.style.height = "150px";
 			});
 
 		new Setting(containerEl)
