@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-attachment-uploader",
 	"name": "Attachment Uploader",
-	"version": "1.0.0",
+	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
 	"description": "This is an attachment uploader plugin for Obsidian",
 	"author": "zhuxining",
