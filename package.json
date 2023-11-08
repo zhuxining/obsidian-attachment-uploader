@@ -1,5 +1,5 @@
 {
-	"name": "obsidian-attachment-uploader",
+	"name": "attachment-uploader",
 	"version": "1.0.0",
 	"description": "This is an attachment uploader plugin for Obsidian ",
 	"main": "main.js",
