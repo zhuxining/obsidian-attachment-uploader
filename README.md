@@ -2,7 +2,6 @@
 
 这个 Obsidian 插件可以帮助你上传本地附件到云存储,上传shell命令可以自定义,要上传附件的格式可自定义。
 
-![设置](https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/exSZUr.png?x-oss-process=image/auto-orient,1/quality,q_80/format,webp)
 
 ## 功能
 
