@@ -1,7 +1,7 @@
 {
 	"name": "attachment-uploader",
 	"version": "1.0.0",
-	"description": "This is an attachment uploader plugin for Obsidian ",
+	"description": "Attachment uploader plugin, which allows you customize the upload command, customize upload file type.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

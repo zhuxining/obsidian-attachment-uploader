@@ -54,14 +54,13 @@ export default class AttachmentUploader extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		// 侧栏上传按钮
-		const ribbonIconEl = this.addRibbonIcon(
+		this.addRibbonIcon(
 			"upload",
-			"Upload Attachments",
+			"Upload attachments",
 			(evt: MouseEvent) => {
 				this.uploadEditorAttachment();
 			}
 		);
-		ribbonIconEl.addClass("ribbon-class");
 
 		this.addCommand({
 			id: "upload-editor-attachments",
@@ -197,7 +196,7 @@ export default class AttachmentUploader extends Plugin {
 		path: string
 	): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
-		console.log(this.settings.uploadCommand);
+
 		// 构建shell命令
 		const command = format(this.settings.uploadCommand, path);
 		try {
