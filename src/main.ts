@@ -15,6 +15,8 @@ import {
 import { join, parse } from "path";
 import { format, promisify } from "util";
 
+import { t } from "./lang/helpers";
+
 interface Attachment {
 	basename: string;
 	alt: string;
@@ -56,7 +58,7 @@ export default class AttachmentUploader extends Plugin {
 		// 侧栏上传按钮
 		this.addRibbonIcon(
 			"upload",
-			"Upload attachments",
+			t("Upload attachments"),
 			(evt: MouseEvent) => {
 				this.uploadEditorAttachment();
 			}
@@ -81,8 +83,9 @@ export default class AttachmentUploader extends Plugin {
 			const attachments = this.getEditorAttachments(activeEditor);
 			new Notice(
 				attachments.length > 0
-					? `已找到${attachments.length}个符合上传条件的附件\n开始上传替换…`
-					: "未找到符合上传条件本地附件\n"
+					? `${attachments.length} +
+					  ${t("attachments that matched the upload conditions \n Start uploading replacement...")}`
+					: `${t("No local attachment matching the upload conditions was found.")}`
 			);
 			attachments.forEach(async (attachment) => {
 				// 获取附件在vault中的路径，配置需要删除时传入文件删除文件
@@ -108,17 +111,19 @@ export default class AttachmentUploader extends Plugin {
 						this.app.vault.delete(sourceFile);
 					}
 					new Notice(
-						`已上传附件：${attachment.inVaultPath}\n替换地址为:${
-							uploadResult.url
-						}\n${
+						`${t("Uploaded attachment:")}${attachment.inVaultPath}\n
+						 ${t("Replace with:")}${uploadResult.url}\n
+						${
 							this.settings.isDeleteSourceFile && sourceFile
-								? `本地附件已删除`
+								? `${t("Local attachment deleted")}`
 								: ""
 						}`
 					);
 				} else {
 					new Notice(
-						`上传失败：${attachment.inVaultPath}\n\n错误信息:\n${uploadResult.errorMessage}`
+						`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t(
+							"Error message:"
+						)}\n${uploadResult.errorMessage}`
 					);
 				}
 			});
@@ -246,8 +251,8 @@ class SettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h1", { text: "上传命令" });
-		new Setting(containerEl).setName("上传服务").addDropdown((dropdown) => {
+		containerEl.createEl("h2", { text: t("Upload command") });
+		new Setting(containerEl).setName(t("Upload service")).addDropdown((dropdown) => {
 			return dropdown
 				.addOptions({
 					uPic: "uPic",
@@ -265,13 +270,14 @@ class SettingTab extends PluginSettingTab {
 		});
 
 		new Setting(containerEl)
-			.setName("执行命令")
+			.setName(t("Executed command"))
 			.setDesc(
-				"命令通过child_process的exec方法执行; %s为要上传文件的路径,请保留; 执行后从shell输出中提取上传后的链接,‘urlMatch = stdout.match(/s+(https?:/ / S +) /)’"
+				`${t(
+					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,"
+				)}‘urlMatch = stdout.match(/s+(https?:/ / S +) /)’`
 			)
 			.addTextArea((textArea) => {
 				textArea
-					.setPlaceholder("请输入")
 					.setValue(
 						uploadCommandDict[this.plugin.settings.uploadService]
 					)
@@ -286,34 +292,37 @@ class SettingTab extends PluginSettingTab {
 				textArea.inputEl.style.height = "80px";
 			});
 
-		new Setting(containerEl).setName("测试文件路径").addText((text) => {
-			text.onChange(async (value) => {
-				this.plugin.settings.testFilePath = value;
-				await this.plugin.saveSettings();
-			});
-			new Setting(containerEl).addButton((btn) => {
-				btn.setButtonText("上传测试").onClick(async () => {
-					if (!this.plugin.settings.testFilePath) {
-						new Notice("请填写测试文件路径");
-						return;
-					}
-					const uploadResult = await this.plugin.uploadServe(
-						this.plugin.settings.testFilePath
-					);
-					new Notice(
-						uploadResult.success
-							? "上传成功\n"
-							: "上传失败\n" + uploadResult.errorMessage
-					);
+		new Setting(containerEl)
+			.setName(t("Test file path"))
+			.addText((text) => {
+				text.onChange(async (value) => {
+					this.plugin.settings.testFilePath = value;
+					await this.plugin.saveSettings();
+				});
+				new Setting(containerEl).addButton((btn) => {
+					btn.setButtonText(t("Upload test")).onClick(async () => {
+						if (!this.plugin.settings.testFilePath) {
+							new Notice(t("Enter the test file path"));
+							return;
+						}
+						const uploadResult = await this.plugin.uploadServe(
+							this.plugin.settings.testFilePath
+						);
+						new Notice(
+							uploadResult.success
+								? t("Upload successful")
+								: t("Upload failed") + uploadResult.errorMessage
+						);
+					});
 				});
 			});
-		});
 
-		containerEl.createEl("h1", { text: "上传规则" });
+		containerEl.createEl("h2", { text: t("Upload rules") });
 		new Setting(containerEl)
-			.setName("上传内容格式")
+			.setName(t("Attachment format to be uploaded"))
 			.setDesc(
-				"配置内格式的文件，会在执行命令时被上传并替换原地址，以回车分割"
+				t("The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by carriage returns.")
+				
 			)
 			.addTextArea((textArea) => {
 				textArea
@@ -326,7 +335,7 @@ class SettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("上传成功后删除本地文件")
+			.setName(t("Delete local files after successful upload"))
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this.plugin.settings.isDeleteSourceFile)
