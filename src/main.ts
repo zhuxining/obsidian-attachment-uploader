@@ -1,8 +1,6 @@
 import { exec } from "child_process";
 import {
 	App,
-	Editor,
-	MarkdownView,
 	Notice,
 	Plugin,
 	PluginSettingTab,
@@ -51,7 +49,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 };
 
 export default class AttachmentUploader extends Plugin {
-	settings: PluginSettings;
+	settings!: PluginSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -67,9 +65,7 @@ export default class AttachmentUploader extends Plugin {
 		this.addCommand({
 			id: "upload-editor-attachments",
 			name: "Upload editor attachments",
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.uploadEditorAttachment();
-			},
+			editorCallback: () => this.uploadEditorAttachment(),
 		});
 
 		this.addSettingTab(new SettingTab(this.app, this));
@@ -218,9 +214,10 @@ export default class AttachmentUploader extends Plugin {
 					errorMessage: stdout,
 				};
 			}
-		} catch (err) {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		} catch (err:any) {
 			console.error(`err: ${err}`);
-			new Notice(err.message);
+			new Notice(err.message.toString());
 			throw err;
 		}
 	}
