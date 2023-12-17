@@ -23,6 +23,5 @@ export default {
 	"Attachment format to be uploaded": "Attachment format to be uploaded",
 	"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by carriage returns.":
 		"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by carriage returns.",
-	"Delete local files after successful upload":
-		"Delete local files after successful upload",
+	"Delete local files after successful upload": "Delete local files after successful upload",
 };

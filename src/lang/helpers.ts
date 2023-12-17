@@ -1,7 +1,7 @@
-import {moment} from 'obsidian';
+import { moment } from "obsidian";
 
-import en from './locale/en';
-import zhCN from './locale/zh-cn';
+import en from "./locale/en";
+import zhCN from "./locale/zh-cn";
 
 const localeMap: { [k: string]: Partial<typeof en> } = {
 	en,
@@ -10,5 +10,5 @@ const localeMap: { [k: string]: Partial<typeof en> } = {
 const locale = localeMap[moment.locale()];
 
 export function t(str: keyof typeof en): string {
-  return (locale && locale[str]) || en[str];
+	return locale?.[str] || en[str];
 }
