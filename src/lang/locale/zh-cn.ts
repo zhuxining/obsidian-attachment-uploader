@@ -1,7 +1,6 @@
 export default {
 	"Upload attachments": "上传附件",
-	"No local attachment matching the upload conditions was found.":
-		"未找到符合上传条件本地附件",
+	"No local attachment matching the upload conditions was found.": "未找到符合上传条件本地附件",
 	"attachments that meet the upload conditions \n Start uploading replacement...":
 		"个符合上传条件的附件\n开始上传替换…",
 	"Uploaded attachment:": "已上传附件:",
