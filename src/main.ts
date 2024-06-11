@@ -1,13 +1,13 @@
 import { exec } from "child_process";
 import {
-	App,
+	type App,
+	type FileSystemAdapter,
+	type MarkdownFileInfo,
 	Notice,
 	Plugin,
 	PluginSettingTab,
 	Setting,
-	FileSystemAdapter,
 	normalizePath,
-	MarkdownFileInfo,
 } from "obsidian";
 
 import { join, parse } from "path";
@@ -79,7 +79,7 @@ export default class AttachmentUploader extends Plugin {
 			);
 			// biome-ignore lint/complexity/noForEach: <explanation>
 			attachments.forEach(async (attachment) => {
-				// 获取附件在vault中的路径，配置需要删除时传入文件删除文件
+				// 获取附件在 vault 中的路径，配置需要删除时传入文件删除文件
 				const sourceFile = this.app.vault.getAbstractFileByPath(attachment.inVaultPath);
 				// 调用上传服务进行上传
 				const uploadResult = await this.uploadServe(attachment.inSystemPath);
@@ -109,40 +109,40 @@ export default class AttachmentUploader extends Plugin {
 	/**
 	 * 获取编辑器中的附件信息
 	 *
-	 * @param markdownFile - Markdown文件信息对象
+	 * @param markdownFile - Markdown 文件信息对象
 	 * @returns 附件数组
 	 */
 	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
 		const attachments: Attachment[] = [];
-		const regex = /!\[(.*?)\]\((.*?)\)/g; // 用于匹配Markdown格式的图片链接的正则表达式
-		const matches = markdownFile?.editor?.getValue().match(regex); // 从编辑器中获取Markdown文件的内容，并使用正则表达式匹配图片链接
-		// 获取文件所在的vault路径
+		const regex = /!\[(.*?)\]\((.*?)\)/g; // 用于匹配 Markdown 格式的图片链接的正则表达式
+		const matches = markdownFile?.editor?.getValue().match(regex); // 从编辑器中获取 Markdown 文件的内容，并使用正则表达式匹配图片链接
+		// 获取文件所在的 vault 路径
 		const vaultSystemPath = (markdownFile?.file?.vault.adapter as FileSystemAdapter).getBasePath();
 
 		if (matches) {
 			// biome-ignore lint/complexity/noForEach: <explanation>
 			matches.forEach((match) => {
 				const attSourcePath = match.match(/\((.*?)\)/)?.[1]; // 从匹配结果中提取图片链接的路径部分
-				const alt = match.match(/\[(.*?)\]/)?.[1]; // 从匹配结果中提取图片的alt文本
+				const alt = match.match(/\[(.*?)\]/)?.[1]; // 从匹配结果中提取图片的 alt 文本
 
 				if (attSourcePath) {
 					// 将图片链接路径进行解码、规范化和解析，得到文件的信息
 					const file = parse(normalizePath(decodeURI(attSourcePath)));
-					// 在Vault中查找与该文件名称和扩展名匹配的文件
+					// 在 Vault 中查找与该文件名称和扩展名匹配的文件
 					const searchFile = this.app.vault.getFiles().find((f) => f.name === file.name + file.ext.toLowerCase());
 
 					const attachment = {
 						source: match,
-						alt: alt ? alt : file.name, // 如果有指定alt文本，则使用指定的alt文本，否则使用文件名称作为alt文本
+						alt: alt ? alt : file.name, // 如果有指定 alt 文本，则使用指定的 alt 文本，否则使用文件名称作为 alt 文本
 						basename: file.base,
 						name: file.name,
 						ext: file.ext,
 						existenceState: attSourcePath.startsWith("http")
 							? "network" // 图片链接是网络地址
 							: searchFile
-							  ? "local" // 图片链接是本地地址
-							  : "missing", // 图片链接未找到
-						inVaultPath: searchFile ? searchFile?.path : normalizePath(attSourcePath), // 在Vault中找到对应的文件获取其Vault路径，否则为绝为原附件路径/图片网络链接
+								? "local" // 图片链接是本地地址
+								: "missing", // 图片链接未找到
+						inVaultPath: searchFile ? searchFile?.path : normalizePath(attSourcePath), // 在 Vault 中找到对应的文件获取其 Vault 路径，否则为绝为原附件路径/图片网络链接
 						inSystemPath: searchFile
 							? encodeURI(join(vaultSystemPath, searchFile?.path)) // 如果找到对应的文件，则拼接出系统路径，否则为原附件路径/图片网络链接
 							: encodeURI(normalizePath(attSourcePath)),
@@ -163,21 +163,22 @@ export default class AttachmentUploader extends Plugin {
 		return attachments; // 返回附件数组
 	}
 
-	/** 上传命令执行后从shell输出中提取上传后的链接
+	/** 上传命令执行后从 shell 输出中提取上传后的链接
 	 *
 	 * @param path  要上传的文件在系统内的路径
 	 */
 	async uploadServe(path: string): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
-		// 构建shell命令
+		// 构建 shell 命令
 		const command = format(this.settings.uploadCommand, path);
 		try {
 			const { stdout } = await execPromise(command);
 			const urlMatch = stdout.match(/\s+(https?:\/\/\S+)/);
 			if (urlMatch) {
+				const decodeUrl = decodeURIComponent(urlMatch[1]);
 				return {
 					success: true,
-					url: urlMatch[1],
+					url: decodeUrl,
 				};
 			}
 			return {
@@ -197,7 +198,7 @@ export default class AttachmentUploader extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-	onunload() {}
+	onunload() { }
 }
 
 class SettingTab extends PluginSettingTab {

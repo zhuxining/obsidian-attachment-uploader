@@ -1,11 +1,11 @@
 {
 	"name": "attachment-uploader",
-	"version": "1.0.0",
+	"version": "1.0.4",
 	"description": "Attachment uploader plugin, which allows you customize the upload command, customize upload file type.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"build": "tsc -noEmit -skipLibCheck && node --no-warnings esbuild.config.mjs production ",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],
