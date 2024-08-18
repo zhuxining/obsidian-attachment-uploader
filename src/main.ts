@@ -30,6 +30,15 @@ interface Attachment {
 	inSystemPath: string;
 }
 
+interface uploadCommandDict {
+	[service: string]: string;
+}
+const uploadCommandDict: uploadCommandDict = {
+	uPic: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
+	Picsee: "/Applications/Picsee.app/Contents/MacOS/Picsee -u %s",
+	custom: "",
+};
+
 interface PluginSettings {
 	uploadService: string;
 	uploadCommand: string;
@@ -40,7 +49,7 @@ interface PluginSettings {
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	uploadService: "uPic",
-	uploadCommand: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
+	uploadCommand: uploadCommandDict.uPic,
 	uploadFileFormat: new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg", ".bmp"]),
 	testFilePath: "",
 	isDeleteSourceFile: false,
