@@ -1,3 +1,4 @@
+// biome-ignore lint/style/useNodejsImportProtocol: <explanation>
 import { exec } from "child_process";
 import {
 	type App,
@@ -7,11 +8,14 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	TFile,
 	normalizePath,
 } from "obsidian";
 
+// biome-ignore lint/style/useNodejsImportProtocol: <explanation>
 import { join, parse } from "path";
-import { format, promisify } from "util";
+// biome-ignore lint/style/useNodejsImportProtocol: <explanation>
+import { promisify } from "util";
 
 import { t } from "./lang/helpers";
 
@@ -21,199 +25,185 @@ interface Attachment {
 	name: string;
 	ext: string;
 	source: string;
-	existenceState: string; //"network" | "local" | "missing"
+	existenceState: "network" | "local" | "missing";
 	inVaultPath: string;
 	inSystemPath: string;
 }
+
 interface PluginSettings {
 	uploadService: string;
 	uploadCommand: string;
 	testFilePath: string;
-	uploadFileFormat: string;
+	uploadFileFormat: Set<string>;
 	isDeleteSourceFile: boolean;
 }
-interface uploadCommandDict {
-	[service: string]: string;
-}
-const uploadCommandDict: uploadCommandDict = {
-	uPic: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
-	Picsee: "/Applications/Picsee.app/Contents/MacOS/Picsee -u %s",
-	custom: "",
-};
+
 const DEFAULT_SETTINGS: PluginSettings = {
 	uploadService: "uPic",
-	uploadCommand: uploadCommandDict.uPic,
-	uploadFileFormat: ".png\n.jpg\n.jpeg\n.gif\n.webp\n.ico\n.svg\n.bmp",
+	uploadCommand: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
+	uploadFileFormat: new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg", ".bmp"]),
 	testFilePath: "",
 	isDeleteSourceFile: false,
 };
 
 export default class AttachmentUploader extends Plugin {
 	settings!: PluginSettings;
+
 	async onload() {
 		await this.loadSettings();
-		// 侧栏上传按钮
-		this.addRibbonIcon("upload", t("Upload attachments"), (evt: MouseEvent) => {
-			this.uploadEditorAttachment();
-		});
+
+		this.addRibbonIcon("upload", t("Upload attachments"), this.uploadEditorAttachment.bind(this));
+
 		this.addCommand({
 			id: "upload-editor-attachments",
 			name: "Upload editor attachments",
 			editorCallback: () => this.uploadEditorAttachment(),
 		});
+
 		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
-	/**
-	 * 上传编辑器内符合条件的附件
-	 */
-	private uploadEditorAttachment() {
+	private async uploadEditorAttachment() {
 		const activeEditor = this.app.workspace.activeEditor;
-		if (activeEditor) {
-			const attachments = this.getEditorAttachments(activeEditor);
+		if (!activeEditor) return;
+
+		const attachments = this.getEditorAttachments(activeEditor);
+		if (attachments.length === 0) {
+			new Notice(t("No local attachment matching the upload conditions was found."));
+			return;
+		}
+
+		new Notice(
+			`${attachments.length} ${t("attachments that matched the upload conditions \n Start uploading replacement...")}`,
+		);
+
+		for (const attachment of attachments) {
+			await this.processAttachment(attachment, activeEditor);
+		}
+	}
+
+	private async processAttachment(attachment: Attachment, activeEditor: MarkdownFileInfo) {
+		const sourceFile = this.app.vault.getAbstractFileByPath(attachment.inVaultPath);
+		const uploadResult = await this.uploadServe(attachment.inSystemPath);
+
+		if (uploadResult.success && uploadResult.url) {
+			this.updateEditorContent(activeEditor, attachment, uploadResult.url);
+			if (this.settings.isDeleteSourceFile && sourceFile instanceof TFile) {
+				await this.app.vault.delete(sourceFile);
+			}
+			this.showSuccessNotice(attachment, uploadResult.url, sourceFile instanceof TFile);
+		} else {
 			new Notice(
-				attachments.length > 0
-					? `${attachments.length} +
-					  ${t("attachments that matched the upload conditions \n Start uploading replacement...")}`
-					: `${t("No local attachment matching the upload conditions was found.")}`,
+				`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`,
 			);
-			// biome-ignore lint/complexity/noForEach: <explanation>
-			attachments.forEach(async (attachment) => {
-				// 获取附件在 vault 中的路径，配置需要删除时传入文件删除文件
-				const sourceFile = this.app.vault.getAbstractFileByPath(attachment.inVaultPath);
-				// 调用上传服务进行上传
-				const uploadResult = await this.uploadServe(attachment.inSystemPath);
-				if (uploadResult.success) {
-					// 更新编辑器中的内容，将源文件地址替换为上传后附件的网络地址
-					activeEditor?.editor?.setValue(
-						activeEditor?.editor?.getValue().replace(attachment.source, `![${attachment.alt}](${uploadResult.url})`),
-					);
-					// 如果设置为删除源文件且源文件存在，则删除源文件
-					if (this.settings.isDeleteSourceFile && sourceFile) {
-						this.app.vault.delete(sourceFile);
-					}
-					new Notice(
-						`${t("Uploaded attachment:")}${attachment.inVaultPath}\n
-						 ${t("Replace with:")}${uploadResult.url}\n
-						${this.settings.isDeleteSourceFile && sourceFile ? `${t("Local attachment deleted")}` : ""}`,
-					);
-				} else {
-					new Notice(
-						`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`,
-					);
-				}
-			});
 		}
 	}
 
-	/**
-	 * 获取编辑器中的附件信息
-	 *
-	 * @param markdownFile - Markdown 文件信息对象
-	 * @returns 附件数组
-	 */
+	private updateEditorContent(editor: MarkdownFileInfo, attachment: Attachment, newUrl: string) {
+		const content = editor.editor?.getValue() ?? "";
+		const updatedContent = content.replace(attachment.source, `![${attachment.alt}](${newUrl})`);
+		editor.editor?.setValue(updatedContent);
+	}
+
+	private showSuccessNotice(attachment: Attachment, newUrl: string, fileDeleted: boolean) {
+		new Notice(
+			`${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${newUrl}\n${
+				fileDeleted ? `${t("Local attachment deleted")}` : ""
+			}`,
+		);
+	}
+
 	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
-		const attachments: Attachment[] = [];
-		const regex = /!\[(.*?)\]\((.*?)\)/g; // 用于匹配 Markdown 格式的图片链接的正则表达式
-		const matches = markdownFile?.editor?.getValue().match(regex); // 从编辑器中获取 Markdown 文件的内容，并使用正则表达式匹配图片链接
-		// 获取文件所在的 vault 路径
-		const vaultSystemPath = (markdownFile?.file?.vault.adapter as FileSystemAdapter).getBasePath();
+		const content = markdownFile.editor?.getValue() ?? "";
+		const regex = /!\[(.*?)\]\((.*?)\)/g;
+		const matches = content.match(regex);
+		if (!matches) return [];
 
-		if (matches) {
-			// biome-ignore lint/complexity/noForEach: <explanation>
-			matches.forEach((match) => {
-				const attSourcePath = match.match(/\((.*?)\)/)?.[1]; // 从匹配结果中提取图片链接的路径部分
-				const alt = match.match(/\[(.*?)\]/)?.[1]; // 从匹配结果中提取图片的 alt 文本
-
-				if (attSourcePath) {
-					// 将图片链接路径进行解码、规范化和解析，得到文件的信息
-					const file = parse(normalizePath(decodeURI(attSourcePath)));
-					// 在 Vault 中查找与该文件名称和扩展名匹配的文件
-					const searchFile = this.app.vault.getFiles().find((f) => f.name === file.name + file.ext.toLowerCase());
-
-					const attachment = {
-						source: match,
-						alt: alt ? alt : file.name, // 如果有指定 alt 文本，则使用指定的 alt 文本，否则使用文件名称作为 alt 文本
-						basename: file.base,
-						name: file.name,
-						ext: file.ext,
-						existenceState: attSourcePath.startsWith("http")
-							? "network" // 图片链接是网络地址
-							: searchFile
-								? "local" // 图片链接是本地地址
-								: "missing", // 图片链接未找到
-						inVaultPath: searchFile ? searchFile?.path : normalizePath(attSourcePath), // 在 Vault 中找到对应的文件获取其 Vault 路径，否则为绝为原附件路径/图片网络链接
-						inSystemPath: searchFile
-							? encodeURI(join(vaultSystemPath, searchFile?.path)) // 如果找到对应的文件，则拼接出系统路径，否则为原附件路径/图片网络链接
-							: encodeURI(normalizePath(attSourcePath)),
-					};
-
-					if (
-						this.settings.uploadFileFormat
-							.split("\n")
-							.includes(attachment.ext.toLowerCase()) && // 检查文件扩展名是否在允许上传的文件格式中
-						attachment.existenceState === "local" // 检查图片链接是否存在本地
-					) {
-						attachments.push(attachment); // 将符合条件的附件添加到附件数组中
-					}
-				}
-			});
-		}
-
-		return attachments; // 返回附件数组
+		const vaultSystemPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+		return matches
+			.map((match) => this.parseAttachment(match, vaultSystemPath))
+			.filter(
+				(attachment): attachment is Attachment =>
+					attachment !== null &&
+					this.settings.uploadFileFormat.has(attachment.ext.toLowerCase()) &&
+					attachment.existenceState === "local",
+			);
 	}
 
-	/** 上传命令执行后从 shell 输出中提取上传后的链接
-	 *
-	 * @param path  要上传的文件在系统内的路径
-	 */
+	private parseAttachment(match: string, vaultSystemPath: string): Attachment | null {
+		const attSourcePath = match.match(/\((.*?)\)/)?.[1];
+		const alt = match.match(/\[(.*?)\]/)?.[1];
+		if (!attSourcePath) return null;
+
+		const file = parse(normalizePath(decodeURI(attSourcePath)));
+		const searchFile = this.app.vault.getFiles().find((f) => f.name === file.name + file.ext.toLowerCase());
+
+		return {
+			source: match,
+			alt: alt ?? file.name,
+			basename: file.base,
+			name: file.name,
+			ext: file.ext,
+			existenceState: attSourcePath.startsWith("http") ? "network" : searchFile ? "local" : "missing",
+			inVaultPath: searchFile ? searchFile.path : normalizePath(attSourcePath),
+			inSystemPath: searchFile
+				? encodeURI(join(vaultSystemPath, searchFile.path))
+				: encodeURI(normalizePath(attSourcePath)),
+		};
+	}
+
 	async uploadServe(path: string): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
-		// 构建 shell 命令
-		const command = format(this.settings.uploadCommand, path);
 		try {
-			const { stdout } = await execPromise(command);
+			const { stdout } = await execPromise(this.settings.uploadCommand.replace("%s", path));
 			const urlMatch = stdout.match(/\s+(https?:\/\/\S+)/);
-			if (urlMatch) {
-				const decodeUrl = decodeURIComponent(urlMatch[1]);
-				return {
-					success: true,
-					url: decodeUrl,
-				};
-			}
-			return {
-				success: false,
-				errorMessage: stdout,
-			};
-		} catch (err: unknown) {
-			const error = err as Error;
-			console.error(`err: ${error}`);
-			new Notice(error.message.toString());
-			throw err;
+			return urlMatch
+				? { success: true, url: decodeURIComponent(urlMatch[1]) }
+				: { success: false, errorMessage: stdout };
+		} catch (err) {
+			console.error(`Upload error: ${err}`);
+			return { success: false, errorMessage: (err as Error).message };
 		}
 	}
+
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const loadedData = await this.loadData();
+		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
+
+		if (loadedData?.uploadService === "custom" && loadedData?.uploadCommand) {
+			this.settings.uploadCommand = loadedData.uploadCommand;
+		}
 	}
+
 	async saveSettings() {
-		await this.saveData(this.settings);
+		await this.saveData({
+			...this.settings,
+			uploadFileFormat: Array.from(this.settings.uploadFileFormat).join("\n"),
+		});
 	}
-	onunload() { }
 }
 
 class SettingTab extends PluginSettingTab {
 	plugin: AttachmentUploader;
+
 	constructor(app: App, plugin: AttachmentUploader) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		this.addUploadCommandSettings(containerEl);
+		this.addUploadRulesSettings(containerEl);
+	}
+
+	private addUploadCommandSettings(containerEl: HTMLElement): void {
 		containerEl.createEl("h2", { text: t("Upload command") });
-		new Setting(containerEl).setName(t("Upload service")).addDropdown((dropdown) => {
-			return dropdown
+
+		new Setting(containerEl).setName(t("Upload service")).addDropdown((dropdown) =>
+			dropdown
 				.addOptions({
 					uPic: "uPic",
 					Picsee: "Picsee",
@@ -222,36 +212,43 @@ class SettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.uploadService)
 				.onChange(async (value) => {
 					this.plugin.settings.uploadService = value;
-					this.plugin.settings.uploadCommand = uploadCommandDict[this.plugin.settings.uploadService];
-					this.display();
+					this.plugin.settings.uploadCommand =
+						value === "custom" ? this.plugin.settings.uploadCommand : DEFAULT_SETTINGS.uploadCommand;
 					await this.plugin.saveSettings();
-				});
-		});
+					this.display();
+				}),
+		);
+
 		new Setting(containerEl)
 			.setName(t("Executed command"))
 			.setDesc(
 				`${t(
 					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,",
-				)}‘urlMatch = stdout.match(/s+(https?:/ / S +) /)’`,
+				)} 'urlMatch = stdout.match(/s+(https?:/ / S +) /)'`,
 			)
-			.addTextArea((textArea) => {
+			.addTextArea((textArea) =>
 				textArea
-					.setValue(uploadCommandDict[this.plugin.settings.uploadService])
+					.setValue(this.plugin.settings.uploadCommand)
 					.onChange(async (value) => {
 						this.plugin.settings.uploadCommand = value;
 						await this.plugin.saveSettings();
 					})
-					.setDisabled(this.plugin.settings.uploadService !== "custom");
+					.setDisabled(this.plugin.settings.uploadService !== "custom"),
+			);
 
-				textArea.inputEl.style.height = "80px";
-			});
+		this.addTestFilePathSetting(containerEl);
+	}
 
-		new Setting(containerEl).setName(t("Test file path")).addText((text) => {
-			text.onChange(async (value) => {
-				this.plugin.settings.testFilePath = value;
-				await this.plugin.saveSettings();
-			});
-			new Setting(containerEl).addButton((btn) => {
+	private addTestFilePathSetting(containerEl: HTMLElement): void {
+		new Setting(containerEl)
+			.setName(t("Test file path"))
+			.addText((text) =>
+				text.onChange(async (value) => {
+					this.plugin.settings.testFilePath = value;
+					await this.plugin.saveSettings();
+				}),
+			)
+			.addButton((btn) =>
 				btn.setButtonText(t("Upload test")).onClick(async () => {
 					if (!this.plugin.settings.testFilePath) {
 						new Notice(t("Enter the test file path"));
@@ -259,11 +256,13 @@ class SettingTab extends PluginSettingTab {
 					}
 					const uploadResult = await this.plugin.uploadServe(this.plugin.settings.testFilePath);
 					new Notice(uploadResult.success ? t("Upload successful") : t("Upload failed") + uploadResult.errorMessage);
-				});
-			});
-		});
+				}),
+			);
+	}
 
+	private addUploadRulesSettings(containerEl: HTMLElement): void {
 		containerEl.createEl("h2", { text: t("Upload rules") });
+
 		new Setting(containerEl)
 			.setName(t("Attachment format to be uploaded"))
 			.setDesc(
@@ -271,18 +270,18 @@ class SettingTab extends PluginSettingTab {
 					"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by carriage returns.",
 				),
 			)
-			.addTextArea((textArea) => {
-				textArea.setValue(this.plugin.settings.uploadFileFormat).onChange(async (value) => {
-					this.plugin.settings.uploadFileFormat = value;
+			.addTextArea((textArea) =>
+				textArea.setValue(Array.from(this.plugin.settings.uploadFileFormat).join("\n")).onChange(async (value) => {
+					this.plugin.settings.uploadFileFormat = new Set(value.split("\n").filter(Boolean));
 					await this.plugin.saveSettings();
-				});
-				textArea.inputEl.style.height = "150px";
-			});
-		new Setting(containerEl).setName(t("Delete local files after successful upload")).addToggle((toggle) => {
+				}),
+			);
+
+		new Setting(containerEl).setName(t("Delete local files after successful upload")).addToggle((toggle) =>
 			toggle.setValue(this.plugin.settings.isDeleteSourceFile).onChange(async (value) => {
 				this.plugin.settings.isDeleteSourceFile = value;
 				await this.plugin.saveSettings();
-			});
-		});
+			}),
+		);
 	}
 }
