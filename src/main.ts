@@ -237,12 +237,13 @@ class SettingTab extends PluginSettingTab {
 			)
 			.addTextArea((textArea) =>
 				textArea
-					.setValue(this.plugin.settings.uploadCommand)
+					.setValue(uploadCommandDict[this.plugin.settings.uploadService])
 					.onChange(async (value) => {
 						this.plugin.settings.uploadCommand = value;
 						await this.plugin.saveSettings();
 					})
-					.setDisabled(this.plugin.settings.uploadService !== "custom"),
+					.setDisabled(this.plugin.settings.uploadService !== "custom")
+					.inputEl.setAttribute("rows", "5"),
 			);
 
 		this.addTestFilePathSetting(containerEl);
@@ -280,10 +281,13 @@ class SettingTab extends PluginSettingTab {
 				),
 			)
 			.addTextArea((textArea) =>
-				textArea.setValue(Array.from(this.plugin.settings.uploadFileFormat).join("\n")).onChange(async (value) => {
-					this.plugin.settings.uploadFileFormat = new Set(value.split("\n").filter(Boolean));
-					await this.plugin.saveSettings();
-				}),
+				textArea
+					.setValue(Array.from(this.plugin.settings.uploadFileFormat).join("\n"))
+					.onChange(async (value) => {
+						this.plugin.settings.uploadFileFormat = new Set(value.split("\n").filter(Boolean));
+						await this.plugin.saveSettings();
+					})
+					.inputEl.setAttribute("rows", "5"),
 			);
 
 		new Setting(containerEl).setName(t("Delete local files after successful upload")).addToggle((toggle) =>
