@@ -239,7 +239,7 @@ class SettingTab extends PluginSettingTab {
 			)
 			.addTextArea((textArea) =>
 				textArea
-					.setValue(uploadCommandDict[this.plugin.settings.uploadService])
+					.setValue(this.plugin.settings.uploadCommand)
 					.onChange(async (value) => {
 						this.plugin.settings.uploadCommand = value;
 						await this.plugin.saveSettings();
