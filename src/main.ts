@@ -177,6 +177,8 @@ export default class AttachmentUploader extends Plugin {
 
 	async loadSettings() {
 		const loadedData = await this.loadData();
+		const uploadFileFormatArray = loadedData.uploadFileFormat.split("\n");
+		loadedData.uploadFileFormat = new Set(uploadFileFormatArray);
 		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
 
 		if (loadedData?.uploadService === "custom" && loadedData?.uploadCommand) {
