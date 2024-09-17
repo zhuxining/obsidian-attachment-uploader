@@ -110,7 +110,8 @@ export default class AttachmentUploader extends Plugin {
 
 	private updateEditorContent(editor: MarkdownFileInfo, attachment: Attachment, newUrl: string) {
 		const content = editor.editor?.getValue() ?? "";
-		const updatedContent = content.replace(attachment.source, `![${attachment.alt}](${newUrl})`);
+		// TODO: check if image, if not remove ! keep to []()
+		const updatedContent = content.replace(attachment.source, `[${attachment.basename}](${newUrl})`);
 		editor.editor?.setValue(updatedContent);
 	}
 
@@ -177,6 +178,8 @@ export default class AttachmentUploader extends Plugin {
 
 	async loadSettings() {
 		const loadedData = await this.loadData();
+		const uploadFileFormatArray = loadedData.uploadFileFormat.split("\n");
+		loadedData.uploadFileFormat = new Set(uploadFileFormatArray);
 		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
 
 		if (loadedData?.uploadService === "custom" && loadedData?.uploadCommand) {
