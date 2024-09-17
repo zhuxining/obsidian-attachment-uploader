@@ -182,6 +182,9 @@ export default class AttachmentUploader extends Plugin {
 		if (loadedData?.uploadService === "custom" && loadedData?.uploadCommand) {
 			this.settings.uploadCommand = loadedData.uploadCommand;
 		}
+		if (typeof this.settings.uploadFileFormat === "string") {
+			this.settings.uploadFileFormat = new Set((this.settings.uploadFileFormat as string).split("\n"));
+		}
 	}
 
 	async saveSettings() {
@@ -221,8 +224,7 @@ class SettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.uploadService)
 				.onChange(async (value) => {
 					this.plugin.settings.uploadService = value;
-					this.plugin.settings.uploadCommand =
-						value === "custom" ? this.plugin.settings.uploadCommand : DEFAULT_SETTINGS.uploadCommand;
+					this.plugin.settings.uploadCommand = uploadCommandDict[value];
 					await this.plugin.saveSettings();
 					this.display();
 				}),
@@ -232,12 +234,12 @@ class SettingTab extends PluginSettingTab {
 			.setName(t("Executed command"))
 			.setDesc(
 				`${t(
-					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,",
-				)} 'urlMatch = stdout.match(/s+(https?:/ / S +) /)'`,
+					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,"
+				)}\n'urlMatch = stdout.match(/s+(https?:/ / S +) /)'`,
 			)
 			.addTextArea((textArea) =>
 				textArea
-					.setValue(uploadCommandDict[this.plugin.settings.uploadService])
+					.setValue(this.plugin.settings.uploadCommand)
 					.onChange(async (value) => {
 						this.plugin.settings.uploadCommand = value;
 						await this.plugin.saveSettings();
@@ -277,17 +279,18 @@ class SettingTab extends PluginSettingTab {
 			.setName(t("Attachment format to be uploaded"))
 			.setDesc(
 				t(
-					"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by carriage returns.",
+					"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.",
 				),
 			)
 			.addTextArea((textArea) =>
 				textArea
-					.setValue(Array.from(this.plugin.settings.uploadFileFormat).join("\n"))
-					.onChange(async (value) => {
-						this.plugin.settings.uploadFileFormat = new Set(value.split("\n").filter(Boolean));
-						await this.plugin.saveSettings();
-					})
-					.inputEl.setAttribute("rows", "5"),
+			.setValue(Array.from(this.plugin.settings.uploadFileFormat).join(","))
+			.onChange(async (value) => {
+				const formats = value.split(/[,\s]+/).map(format => format.trim()).filter(Boolean);
+				this.plugin.settings.uploadFileFormat = new Set(formats.map(format => format.startsWith('.') ? format : `.${format}`));
+				await this.plugin.saveSettings();
+			})
+			.inputEl.setAttribute("rows", "4"),
 			);
 
 		new Setting(containerEl).setName(t("Delete local files after successful upload")).addToggle((toggle) =>
