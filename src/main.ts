@@ -110,8 +110,14 @@ export default class AttachmentUploader extends Plugin {
 
 	private updateEditorContent(editor: MarkdownFileInfo, attachment: Attachment, newUrl: string) {
 		const content = editor.editor?.getValue() ?? "";
-		// TODO: check if image, if not remove ! keep to []()
-		const updatedContent = content.replace(attachment.source, `[${attachment.basename}](${newUrl})`);
+
+		// https://help.obsidian.md/Files+and+folders/Accepted+file+formats
+		// Obsidian Accepted+file+formats
+		const isImage = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i.test(attachment.ext);
+		const updatedContent = content.replace(
+			attachment.source,
+			isImage ? `![${attachment.name}](${newUrl})` : `[${attachment.name}](${newUrl})`
+		);
 		editor.editor?.setValue(updatedContent);
 	}
 
