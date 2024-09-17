@@ -1,6 +1,6 @@
 {
 	"name": "attachment-uploader",
-	"version": "1.0.4",
+	"version": "1.0.7",
 	"description": "Attachment uploader plugin, which allows you customize the upload command, customize upload file type.",
 	"main": "main.js",
 	"scripts": {

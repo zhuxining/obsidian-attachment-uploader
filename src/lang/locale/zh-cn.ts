@@ -12,7 +12,7 @@ export default {
 	"Upload service": "上传服务",
 	"Executed command": "执行命令",
 	"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,":
-		"命令通过child_process的exec方法执行; %s为要上传文件的路径,请保留; 执行后从shell输出中提取上传后的链接",
+		"命令通过child_process的exec方法执行; 自定义命令要求为[脚本+本地图片地址]能执行且执行成功后在shell中打印上传后的https网络地址,%s代替文件本地路径;如「/custom.script /one.png」执行后shell中输出「...https://domain/one.png...」,插件会通过正则提取[https://domain/one.png],正则匹配语法为",
 	"Test file path": "测试文件路径",
 	"Upload test": "上传测试",
 	"Enter the test file path": "请输入测试上传文件路径",
@@ -20,7 +20,7 @@ export default {
 	"Upload failed": "上传失败",
 	"Upload rules": "上传规则",
 	"Attachment format to be uploaded": "需求上传附件的格式",
-	"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by carriage returns.":
-		"配置内格式的文件，会在执行命令时被上传并用网络地址替换原地址，格式以回车分割",
+	"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
+		"配置内格式的文件，会在执行命令时被上传并用网络地址替换原地址，格式以「英文逗号」分割",
 	"Delete local files after successful upload": "上传成功后删除本地文件",
 };

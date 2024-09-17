@@ -24,7 +24,18 @@
     -  上传命令：配置上传附件的 shell 命令
     -  需要上传的附件格式：配置需要上传的附件格式,以回车分隔
     -  上传后是否要删除原附件：配置上传后是否要删除原附件
-
+3. 自定义命令示例
+    - uPic在shell中的执行命令为`/Applications/uPic.app/Contents/MacOS/uPic -o url -u /local.png`
+    - shell中输出为
+        ```
+        Uploading ...
+        Uploading 1/1
+        Output URL:
+        https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/Snipaste_2024-08-18_22-14-14.png?x-oss-process=image/auto-orient,1/quality,q_80/format,webp
+        ```
+    - 此插件用%s代替图片本地地址，通过`urlMatch = stdout.match(/s+(https?:/ / S +) /)`来提取命令执行后shell中输出的图片url
+    - 因此使用uPic命令为`/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
+    - 如果自己写脚本来上传图片,请在shell输出中打印上传后的图片网络地址
 
 ## 插件使用
 
