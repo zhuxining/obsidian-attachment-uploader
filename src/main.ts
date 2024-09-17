@@ -50,14 +50,17 @@ interface PluginSettings {
 const DEFAULT_SETTINGS: PluginSettings = {
 	uploadService: "uPic",
 	uploadCommand: uploadCommandDict.uPic,
-	uploadFileFormat: new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg", ".bmp"]),
+	uploadFileFormat: new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".bmp"]),
 	testFilePath: "",
 	isDeleteSourceFile: false,
 };
-
 export default class AttachmentUploader extends Plugin {
 	settings!: PluginSettings;
 
+	/**
+	 * 插件加载时执行的方法
+	 * 加载设置，添加功能按钮和命令，设置设置选项卡
+	 */
 	async onload() {
 		await this.loadSettings();
 
@@ -72,6 +75,10 @@ export default class AttachmentUploader extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
+	/**
+	 * 上传编辑器中的附件
+	 * 获取当前编辑器中的附件，并逐个处理上传
+	 */
 	private async uploadEditorAttachment() {
 		const activeEditor = this.app.workspace.activeEditor;
 		if (!activeEditor) return;
@@ -91,44 +98,53 @@ export default class AttachmentUploader extends Plugin {
 		}
 	}
 
+	/**
+	 * 处理单个附件
+	 * 上传附件，更新编辑器内容，显示处理结果
+	 */
 	private async processAttachment(attachment: Attachment, activeEditor: MarkdownFileInfo) {
 		const sourceFile = this.app.vault.getAbstractFileByPath(attachment.inVaultPath);
 		const uploadResult = await this.uploadServe(attachment.inSystemPath);
 
 		if (uploadResult.success && uploadResult.url) {
 			this.updateEditorContent(activeEditor, attachment, uploadResult.url);
+			new Notice(
+				`${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${uploadResult.url}`
+			);
+
 			if (this.settings.isDeleteSourceFile && sourceFile instanceof TFile) {
 				await this.app.vault.delete(sourceFile);
+				new Notice(`${t("Local attachment deleted")}: ${attachment.inVaultPath}`);
 			}
-			this.showSuccessNotice(attachment, uploadResult.url, sourceFile instanceof TFile);
 		} else {
 			new Notice(
-				`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`,
+				`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`
 			);
 		}
 	}
 
+	/**
+	 * 更新编辑器内容
+	 * 替换原有的附件链接为新的URL
+	 */
 	private updateEditorContent(editor: MarkdownFileInfo, attachment: Attachment, newUrl: string) {
 		const content = editor.editor?.getValue() ?? "";
 
 		// https://help.obsidian.md/Files+and+folders/Accepted+file+formats
-		// Obsidian Accepted+file+formats
+		// Obsidian accepted image file formats
 		const isImage = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i.test(attachment.ext);
 		const updatedContent = content.replace(
 			attachment.source,
-			isImage ? `![${attachment.name}](${newUrl})` : `[${attachment.name}](${newUrl})`
+			isImage ? `![${attachment.name}](${encodeURI(newUrl)})` : `[${attachment.name}](${encodeURI(newUrl)})`
 		);
 		editor.editor?.setValue(updatedContent);
 	}
 
-	private showSuccessNotice(attachment: Attachment, newUrl: string, fileDeleted: boolean) {
-		new Notice(
-			`${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${newUrl}\n${
-				fileDeleted ? `${t("Local attachment deleted")}` : ""
-			}`,
-		);
-	}
 
+	/**
+	 * 获取编辑器中所有的附件
+	 * 解析编辑器内容，找出符合条件的附件，条件为符合markdown链接格式![]()
+	 */
 	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
 		const content = markdownFile.editor?.getValue() ?? "";
 		const regex = /!\[(.*?)\]\((.*?)\)/g;
@@ -146,13 +162,18 @@ export default class AttachmentUploader extends Plugin {
 			);
 	}
 
+	/**
+	 * 解析单个附件
+	 * 从匹配的字符串中提取附件信息
+	 */
 	private parseAttachment(match: string, vaultSystemPath: string): Attachment | null {
 		const attSourcePath = match.match(/\((.*?)\)/)?.[1];
 		const alt = match.match(/\[(.*?)\]/)?.[1];
 		if (!attSourcePath) return null;
 
 		const file = parse(normalizePath(decodeURI(attSourcePath)));
-		const searchFile = this.app.vault.getFiles().find((f) => f.name === file.name + file.ext.toLowerCase());
+
+		const searchFile = this.app.vault.getFiles().find((f) => f.name.toLowerCase() === (file.name + file.ext).toLowerCase());
 
 		return {
 			source: match,
@@ -160,6 +181,7 @@ export default class AttachmentUploader extends Plugin {
 			basename: file.base,
 			name: file.name,
 			ext: file.ext,
+			// TODO：原计划是想把非白名单域名的文件转存到自己的OSS上
 			existenceState: attSourcePath.startsWith("http") ? "network" : searchFile ? "local" : "missing",
 			inVaultPath: searchFile ? searchFile.path : normalizePath(attSourcePath),
 			inSystemPath: searchFile
@@ -168,6 +190,10 @@ export default class AttachmentUploader extends Plugin {
 		};
 	}
 
+	/**
+	 * 执行上传服务
+	 * 使用设置的上传命令上传文件
+	 */
 	async uploadServe(path: string): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
 		try {
@@ -182,24 +208,28 @@ export default class AttachmentUploader extends Plugin {
 		}
 	}
 
+	/**
+	 * 加载插件设置
+	 */
 	async loadSettings() {
 		const loadedData = await this.loadData();
-		const uploadFileFormatArray = loadedData.uploadFileFormat.split("\n");
-		loadedData.uploadFileFormat = new Set(uploadFileFormatArray);
 		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
 
 		if (loadedData?.uploadService === "custom" && loadedData?.uploadCommand) {
 			this.settings.uploadCommand = loadedData.uploadCommand;
 		}
 		if (typeof this.settings.uploadFileFormat === "string") {
-			this.settings.uploadFileFormat = new Set((this.settings.uploadFileFormat as string).split("\n"));
+			this.settings.uploadFileFormat = new Set((this.settings.uploadFileFormat as string).split(","));
 		}
 	}
 
+	/**
+	 * 保存插件设置
+	 */
 	async saveSettings() {
 		await this.saveData({
 			...this.settings,
-			uploadFileFormat: Array.from(this.settings.uploadFileFormat).join("\n"),
+			uploadFileFormat: Array.from(this.settings.uploadFileFormat).join(","),
 		});
 	}
 }
@@ -212,6 +242,9 @@ class SettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	/**
+	 * 显示设置选项卡
+	 */
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
@@ -220,6 +253,9 @@ class SettingTab extends PluginSettingTab {
 		this.addUploadRulesSettings(containerEl);
 	}
 
+	/**
+	 * 设置上传命令
+	 */
 	private addUploadCommandSettings(containerEl: HTMLElement): void {
 		containerEl.createEl("h2", { text: t("Upload command") });
 
@@ -260,6 +296,9 @@ class SettingTab extends PluginSettingTab {
 		this.addTestFilePathSetting(containerEl);
 	}
 
+	/**
+	 * 根据配置的上传命令，测试本地文件是否能上传成功
+	 */
 	private addTestFilePathSetting(containerEl: HTMLElement): void {
 		new Setting(containerEl)
 			.setName(t("Test file path"))
@@ -281,6 +320,9 @@ class SettingTab extends PluginSettingTab {
 			);
 	}
 
+	/**
+	 * 配置上传规则，哪些格式的文件可以被上传
+	 */
 	private addUploadRulesSettings(containerEl: HTMLElement): void {
 		containerEl.createEl("h2", { text: t("Upload rules") });
 
@@ -293,13 +335,16 @@ class SettingTab extends PluginSettingTab {
 			)
 			.addTextArea((textArea) =>
 				textArea
-			.setValue(Array.from(this.plugin.settings.uploadFileFormat).join(","))
-			.onChange(async (value) => {
-				const formats = value.split(/[,\s]+/).map(format => format.trim()).filter(Boolean);
-				this.plugin.settings.uploadFileFormat = new Set(formats.map(format => format.startsWith('.') ? format : `.${format}`));
-				await this.plugin.saveSettings();
-			})
-			.inputEl.setAttribute("rows", "4"),
+					.setValue(Array.from(this.plugin.settings.uploadFileFormat).join(", "))
+					.onChange(async (value) => {
+						const formats = value.split(/[,\s]+/)
+							.map(format => format.trim().toLowerCase())
+							.filter(Boolean)
+							.map(format => format.startsWith('.') ? format : `.${format}`);
+						this.plugin.settings.uploadFileFormat = new Set(formats);
+						await this.plugin.saveSettings();
+					})
+					.inputEl.setAttribute("rows", "4"),
 			);
 
 		new Setting(containerEl).setName(t("Delete local files after successful upload")).addToggle((toggle) =>
