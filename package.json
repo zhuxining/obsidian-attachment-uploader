@@ -24,5 +24,10 @@
 		"obsidian": "latest",
 		"tslib": "latest",
 		"typescript": "latest"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild"
+		]
 	}
 }
