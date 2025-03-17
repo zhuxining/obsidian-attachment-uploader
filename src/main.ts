@@ -133,9 +133,12 @@ export default class AttachmentUploader extends Plugin {
 		// https://help.obsidian.md/Files+and+folders/Accepted+file+formats
 		// Obsidian accepted image file formats
 		const isImage = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i.test(attachment.ext);
+		
+		// 确保正确处理包含空格的文件名
+		const encodedUrl = encodeURI(newUrl).replace(/%20/g, '%20');
 		const updatedContent = content.replace(
 			attachment.source,
-			isImage ? `![${attachment.name}](${encodeURI(newUrl)})` : `[${attachment.name}](${encodeURI(newUrl)})`
+			isImage ? `![${attachment.name}](${encodedUrl})` : `[${attachment.name}](${encodedUrl})`
 		);
 		editor.editor?.setValue(updatedContent);
 	}
@@ -171,9 +174,15 @@ export default class AttachmentUploader extends Plugin {
 		const alt = match.match(/\[(.*?)\]/)?.[1];
 		if (!attSourcePath) return null;
 
-		const file = parse(normalizePath(decodeURI(attSourcePath)));
+		// 确保正确解码 URI 编码的路径
+		const decodedPath = decodeURI(attSourcePath);
+		const file = parse(normalizePath(decodedPath));
 
-		const searchFile = this.app.vault.getFiles().find((f) => f.name.toLowerCase() === (file.name + file.ext).toLowerCase());
+		// 使用更精确的文件查找方法
+		const searchFile = this.app.vault.getFiles().find((f) => 
+			f.path.toLowerCase() === normalizePath(decodedPath).toLowerCase() || 
+			f.name.toLowerCase() === (file.name + file.ext).toLowerCase()
+		);
 
 		return {
 			source: match,
@@ -181,12 +190,11 @@ export default class AttachmentUploader extends Plugin {
 			basename: file.base,
 			name: file.name,
 			ext: file.ext,
-			// TODO：原计划是想把非白名单域名的文件转存到自己的OSS上
 			existenceState: attSourcePath.startsWith("http") ? "network" : searchFile ? "local" : "missing",
-			inVaultPath: searchFile ? searchFile.path : normalizePath(attSourcePath),
+			inVaultPath: searchFile ? searchFile.path : normalizePath(decodedPath),
 			inSystemPath: searchFile
-				? encodeURI(join(vaultSystemPath, searchFile.path))
-				: encodeURI(normalizePath(attSourcePath)),
+				? join(vaultSystemPath, searchFile.path)
+				: normalizePath(decodedPath),
 		};
 	}
 
@@ -197,7 +205,9 @@ export default class AttachmentUploader extends Plugin {
 	async uploadServe(path: string): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
 		try {
-			const { stdout } = await execPromise(this.settings.uploadCommand.replace("%s", path));
+			// 确保路径被正确引用，防止空格问题
+			const escapedPath = `"${path.replace(/"/g, '\\"')}"`;
+			const { stdout } = await execPromise(this.settings.uploadCommand.replace("%s", escapedPath));
 			const urlMatch = stdout.match(/\s+(https?:\/\/\S+)/);
 			return urlMatch
 				? { success: true, url: decodeURIComponent(urlMatch[1]) }
