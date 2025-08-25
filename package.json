@@ -16,9 +16,8 @@
 	},
 	"license": "MIT",
 	"devDependencies": {
+		"@biomejs/biome": "2.2.2",
 		"@types/node": "latest",
-		"@typescript-eslint/eslint-plugin": "latest",
-		"@typescript-eslint/parser": "latest",
 		"builtin-modules": "latest",
 		"esbuild": "latest",
 		"obsidian": "latest",

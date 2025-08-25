@@ -1,22 +1,18 @@
-// biome-ignore lint/style/useNodejsImportProtocol: <explanation>
+/** biome-ignore-all lint/style/useNodejsImportProtocol: <obsidian limit> */
 import { exec } from "child_process";
 import {
 	type App,
 	type FileSystemAdapter,
 	type MarkdownFileInfo,
 	Notice,
+	normalizePath,
 	Plugin,
 	PluginSettingTab,
 	Setting,
 	TFile,
-	normalizePath,
 } from "obsidian";
-
-// biome-ignore lint/style/useNodejsImportProtocol: <explanation>
 import { join, parse } from "path";
-// biome-ignore lint/style/useNodejsImportProtocol: <explanation>
 import { promisify } from "util";
-
 import { t } from "./lang/helpers";
 
 interface Attachment {
@@ -109,7 +105,7 @@ export default class AttachmentUploader extends Plugin {
 		if (uploadResult.success && uploadResult.url) {
 			this.updateEditorContent(activeEditor, attachment, uploadResult.url);
 			new Notice(
-				`${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${uploadResult.url}`
+				`${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${uploadResult.url}`,
 			);
 
 			if (this.settings.isDeleteSourceFile && sourceFile instanceof TFile) {
@@ -118,7 +114,7 @@ export default class AttachmentUploader extends Plugin {
 			}
 		} else {
 			new Notice(
-				`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`
+				`${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`,
 			);
 		}
 	}
@@ -133,16 +129,15 @@ export default class AttachmentUploader extends Plugin {
 		// https://help.obsidian.md/Files+and+folders/Accepted+file+formats
 		// Obsidian accepted image file formats
 		const isImage = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i.test(attachment.ext);
-		
+
 		// 确保正确处理包含空格的文件名
-		const encodedUrl = encodeURI(newUrl).replace(/%20/g, '%20');
+		const encodedUrl = encodeURI(newUrl).replace(/%20/g, "%20");
 		const updatedContent = content.replace(
 			attachment.source,
-			isImage ? `![${attachment.name}](${encodedUrl})` : `[${attachment.name}](${encodedUrl})`
+			isImage ? `![${attachment.name}](${encodedUrl})` : `[${attachment.name}](${encodedUrl})`,
 		);
 		editor.editor?.setValue(updatedContent);
 	}
-
 
 	/**
 	 * 获取编辑器中所有的附件
@@ -179,10 +174,13 @@ export default class AttachmentUploader extends Plugin {
 		const file = parse(normalizePath(decodedPath));
 
 		// 使用更精确的文件查找方法
-		const searchFile = this.app.vault.getFiles().find((f) => 
-			f.path.toLowerCase() === normalizePath(decodedPath).toLowerCase() || 
-			f.name.toLowerCase() === (file.name + file.ext).toLowerCase()
-		);
+		const searchFile = this.app.vault
+			.getFiles()
+			.find(
+				(f) =>
+					f.path.toLowerCase() === normalizePath(decodedPath).toLowerCase() ||
+					f.name.toLowerCase() === (file.name + file.ext).toLowerCase(),
+			);
 
 		return {
 			source: match,
@@ -190,7 +188,11 @@ export default class AttachmentUploader extends Plugin {
 			basename: file.base,
 			name: file.name,
 			ext: file.ext,
-			existenceState: attSourcePath.startsWith("http") ? "network" : searchFile ? "local" : "missing",
+			existenceState: attSourcePath.startsWith("http")
+				? "network"
+				: searchFile
+					? "local"
+					: "missing",
 			inVaultPath: searchFile ? searchFile.path : normalizePath(decodedPath),
 			inSystemPath: searchFile
 				? join(vaultSystemPath, searchFile.path)
@@ -202,7 +204,9 @@ export default class AttachmentUploader extends Plugin {
 	 * 执行上传服务
 	 * 使用设置的上传命令上传文件
 	 */
-	async uploadServe(path: string): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
+	async uploadServe(
+		path: string,
+	): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
 		const execPromise = promisify(exec);
 		try {
 			// 确保路径被正确引用，防止空格问题
@@ -229,7 +233,9 @@ export default class AttachmentUploader extends Plugin {
 			this.settings.uploadCommand = loadedData.uploadCommand;
 		}
 		if (typeof this.settings.uploadFileFormat === "string") {
-			this.settings.uploadFileFormat = new Set((this.settings.uploadFileFormat as string).split(","));
+			this.settings.uploadFileFormat = new Set(
+				(this.settings.uploadFileFormat as string).split(","),
+			);
 		}
 	}
 
@@ -289,7 +295,7 @@ class SettingTab extends PluginSettingTab {
 			.setName(t("Executed command"))
 			.setDesc(
 				`${t(
-					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,"
+					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,",
 				)}\n'urlMatch = stdout.match(/s+(https?:/ / S +) /)'`,
 			)
 			.addTextArea((textArea) =>
@@ -325,7 +331,11 @@ class SettingTab extends PluginSettingTab {
 						return;
 					}
 					const uploadResult = await this.plugin.uploadServe(this.plugin.settings.testFilePath);
-					new Notice(uploadResult.success ? t("Upload successful") : t("Upload failed") + uploadResult.errorMessage);
+					new Notice(
+						uploadResult.success
+							? t("Upload successful")
+							: t("Upload failed") + uploadResult.errorMessage,
+					);
 				}),
 			);
 	}
@@ -347,21 +357,24 @@ class SettingTab extends PluginSettingTab {
 				textArea
 					.setValue(Array.from(this.plugin.settings.uploadFileFormat).join(", "))
 					.onChange(async (value) => {
-						const formats = value.split(/[,\s]+/)
-							.map(format => format.trim().toLowerCase())
+						const formats = value
+							.split(/[,\s]+/)
+							.map((format) => format.trim().toLowerCase())
 							.filter(Boolean)
-							.map(format => format.startsWith('.') ? format : `.${format}`);
+							.map((format) => (format.startsWith(".") ? format : `.${format}`));
 						this.plugin.settings.uploadFileFormat = new Set(formats);
 						await this.plugin.saveSettings();
 					})
 					.inputEl.setAttribute("rows", "4"),
 			);
 
-		new Setting(containerEl).setName(t("Delete local files after successful upload")).addToggle((toggle) =>
-			toggle.setValue(this.plugin.settings.isDeleteSourceFile).onChange(async (value) => {
-				this.plugin.settings.isDeleteSourceFile = value;
-				await this.plugin.saveSettings();
-			}),
-		);
+		new Setting(containerEl)
+			.setName(t("Delete local files after successful upload"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.isDeleteSourceFile).onChange(async (value) => {
+					this.plugin.settings.isDeleteSourceFile = value;
+					await this.plugin.saveSettings();
+				}),
+			);
 	}
 }
