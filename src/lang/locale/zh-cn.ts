@@ -11,8 +11,8 @@ export default {
 	"Upload command": "上传命令",
 	"Upload service": "上传服务",
 	"Executed command": "执行命令",
-	"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,":
-		"命令通过child_process的exec方法执行; 自定义命令要求为[脚本+本地图片地址]能执行且执行成功后在shell中打印上传后的https网络地址,%s代替文件本地路径;如「/custom.script /one.png」执行后shell中输出「...https://domain/one.png...」,插件会通过正则提取[https://domain/one.png],正则匹配语法为",
+	"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md":
+		"命令通过child_process的exec方法执行; 自定义命令要求为[脚本+本地图片地址]能执行且执行成功后在shell中打印上传后的https网络地址,%s代替文件本地路径;如「/custom.script /one.png」执行后shell中输出「...https://domain/one.png...」,插件会通过正则提取[https://domain/one.png],正则匹配语法参考README_ZH.md",
 	"Test file path": "测试文件路径",
 	"Upload test": "上传测试",
 	"Enter the test file path": "请输入测试上传文件路径",

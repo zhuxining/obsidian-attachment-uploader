@@ -12,8 +12,8 @@ export default {
 	"Upload command": "Upload command",
 	"Upload service": "Upload service",
 	"Executed command": "Executed command",
-	"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,":
-		"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,",
+	"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md":
+		"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md",
 	"Test file path": "Test file path",
 	"Upload test": "Upload test",
 	"Enter the test file path": "Enter the test file path",

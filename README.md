@@ -1,49 +1,49 @@
 # obsidian-attachment-uploader
 
-这个 Obsidian 插件可以帮助你上传本地附件到云存储,上传shell命令可以自定义,要上传附件的格式可自定义。
+This Obsidian plugin helps you upload local attachments to cloud storage. You can customize the upload shell command and specify which attachment formats to upload.
 
-## 功能
+[中文文档](README_ZH.md)
 
-* 支持自定义shell命令进行上传
-  * 内置[uPic](https://github.com/gee1k/uPic)上传命令`/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
-  * 内置[Picsee](https://picsee.chitaner.com/blog/Picsee_imageClound_command.html)上传命令`"/Applications/Picsee.app/Contents/MacOS/Picsee -u %s"`
-* 自定义需要上传的附件格式
-* 上传后是否要删除原附件
+## Features
 
-## 插件安装
+* Custom shell command for uploading
+  * Built-in [uPic](https://github.com/gee1k/uPic) upload command: `/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
+  * Built-in [Picsee](https://picsee.chitaner.com/blog/Picsee_imageClound_command.html) upload command: `"/Applications/Picsee.app/Contents/MacOS/Picsee -u %s"`
+* Customizable attachment formats to upload
+* Option to delete original attachments after upload
+* Automatic upload when pasting or dragging from outside Obsidian
 
-1. 在 Obsidian 中，打开插件管理器
-2. 搜索 "obsidian-attachment-uploader"
-3. 点击 "安装",安装后启用并配置
+## Installation
 
+1. In Obsidian, open the plugin manager
+2. Search for "obsidian-attachment-uploader"
+3. Click "Install", then enable and configure after installation
 
-## 使用配置
+## Configuration
 
-1.  安装图床工具（带shell上传命令）或自定义制作shell上传命令
-2.  Obsidian attachment uploader插件配置
-    -  上传命令：配置上传附件的 shell 命令
-    -  需要上传的附件格式：配置需要上传的附件格式,以回车分隔
-    -  上传后是否要删除原附件：配置上传后是否要删除原附件
-3. 自定义命令示例
-    - uPic在shell中的执行命令为`/Applications/uPic.app/Contents/MacOS/uPic -o url -u /local.png`
-    - shell中输出为
-        ```
-        Uploading ...
-        Uploading 1/1
-        Output URL:
-        https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/Snipaste_2024-08-18_22-14-14.png?x-oss-process=image/auto-orient,1/quality,q_80/format,webp
-        ```
-    - 此插件用%s代替图片本地地址，通过`urlMatch = stdout.match(/s+(https?:/ / S +) /)`来提取命令执行后shell中输出的图片url
-    - 因此使用uPic命令为`/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
-    - 如果自己写脚本来上传图片,请在shell输出中打印上传后的图片网络地址
+1. Install an image hosting tool (with shell upload command) or create a custom shell upload command
+2. Configure the Obsidian attachment uploader plugin:
+   - **Upload Command**: Configure the shell command for uploading attachments
+   - **Attachment Formats to Upload**: Configure which attachment formats to upload (separated by line breaks)
+   - **Delete Original After Upload**: Configure whether to delete original attachments after upload
+3. Custom command examples:
+   - uPic shell execution command: `/Applications/uPic.app/Contents/MacOS/uPic -o url -u /local.png`
+   - Shell output format:
+     ```
+     Uploading ...
+     Uploading 1/1
+     Output URL:
+     https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/Snipaste_2024-08-18_22-14-14.png?x-oss-process=image/auto-orient,1/quality,q_80/format,webp
+     ```
+   - This plugin uses `%s` to replace the local image path and extracts the image URL from shell output using `urlMatch = stdout.match(/\s+(https?:\/\/\S+)/)`
+   - Therefore, the uPic command should be: `/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
+   - If writing your own upload script, make sure to print the uploaded image's network URL in the shell output
 
-## 插件使用
+## Usage
 
-1. 在 Obsidian 中打开包含附件的笔记
-2. `command+p`呼出面板输入`Upload editor attachments`，或使用`Ribbon`按钮
+1. Open a note containing attachments in Obsidian
+2. Press `command+p` to open the command palette and type `Upload editor attachments`, or use the Ribbon button
 
-## 感谢
+## Credits
 
-* 参考[typora](https://typora.io/)图片上传
-
-
+* Inspired by [typora](https://typora.io/) image upload functionality

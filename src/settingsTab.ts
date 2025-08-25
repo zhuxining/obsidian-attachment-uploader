@@ -65,8 +65,8 @@ export class SettingTab extends PluginSettingTab {
 			.setName(t("Executed command"))
 			.setDesc(
 				`${t(
-					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution,",
-				)}\n'urlMatch = stdout.match(/s+(https?:/ / S +) /)'`,
+					"The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md",
+				)}`,
 			)
 			.addTextArea((textArea) =>
 				textArea
