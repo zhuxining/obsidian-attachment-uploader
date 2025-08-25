@@ -145,7 +145,7 @@ export default class AttachmentUploader extends Plugin {
 	 */
 	private getEditorAttachments(markdownFile: MarkdownFileInfo): Attachment[] {
 		const content = markdownFile.editor?.getValue() ?? "";
-		const regex = /!\[(.*?)\]\((.*?)\)/g;
+		const regex = /!\[(.*?)\]\((.*?)\)|!\[\[([^\]]+)\]\]/g;
 		const matches = content.match(regex);
 		if (!matches) return [];
 
@@ -165,8 +165,19 @@ export default class AttachmentUploader extends Plugin {
 	 * 从匹配的字符串中提取附件信息
 	 */
 	private parseAttachment(match: string, vaultSystemPath: string): Attachment | null {
-		const attSourcePath = match.match(/\((.*?)\)/)?.[1];
-		const alt = match.match(/\[(.*?)\]/)?.[1];
+		let attSourcePath: string | undefined;
+		let alt: string | undefined;
+
+		// Handle ![]() format
+		if (match.includes("(") && match.includes(")")) {
+			attSourcePath = match.match(/\((.*?)\)/)?.[1];
+			alt = match.match(/\[(.*?)\]/)?.[1];
+		}
+		// Handle ![[]] format
+		else if (match.startsWith("![[") && match.endsWith("]]")) {
+			attSourcePath = match.match(/\[\[(.*?)\]\]/)?.[1];
+		}
+
 		if (!attSourcePath) return null;
 
 		// 确保正确解码 URI 编码的路径
