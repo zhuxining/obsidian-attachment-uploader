@@ -24,4 +24,8 @@ export default {
 	"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
 		"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.",
 	"Delete local files after successful upload": "Delete local files after successful upload",
+	"Auto uploaded:": "Auto uploaded:",
+	"Auto upload": "Auto upload",
+	"When enabled, files will be automatically uploaded and replaced when pasting or dragging":
+		"When enabled, files will be automatically uploaded and replaced when pasting or dragging",
 };

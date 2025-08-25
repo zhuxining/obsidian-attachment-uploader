@@ -1,7 +1,7 @@
 export default {
 	"Upload attachments": "上传附件",
 	"No local attachment matching the upload conditions was found.": "未找到符合上传条件本地附件",
-	"attachments that meet the upload conditions \n Start uploading replacement...":
+	"attachments that matched the upload conditions \n Start uploading replacement...":
 		"个符合上传条件的附件\n开始上传替换…",
 	"Uploaded attachment:": "已上传附件:",
 	"Replace with:": "替换为:",
@@ -23,4 +23,8 @@ export default {
 	"The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
 		"配置内格式的文件，会在执行命令时被上传并用网络地址替换原地址，格式以「英文逗号」分割",
 	"Delete local files after successful upload": "上传成功后删除本地文件",
+	"Auto uploaded:": "自动上传:",
+	"Auto upload": "自动上传",
+	"When enabled, files will be automatically uploaded and replaced when pasting or dragging":
+		"开启后，粘贴、拖拽时会自动上传并替换文件",
 };
