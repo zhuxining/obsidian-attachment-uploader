@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/style/useNodejsImportProtocol: <obsidian limit> */
 import {
 	type Editor,
 	type MarkdownFileInfo,
@@ -206,10 +205,10 @@ export default class AttachmentUploader extends Plugin {
 	private async saveTempFile(file: File): Promise<string> {
 		const arrayBuffer = await file.arrayBuffer();
 		const buffer = Buffer.from(arrayBuffer);
-		const tempDir = require("os").tmpdir();
-		const tempPath = require("path").join(tempDir, file.name);
+		const tempDir = require("node:os").tmpdir();
+		const tempPath = require("node:path").join(tempDir, file.name);
 
-		require("fs").writeFileSync(tempPath, buffer);
+		require("node:fs").writeFileSync(tempPath, buffer);
 		return tempPath;
 	}
 

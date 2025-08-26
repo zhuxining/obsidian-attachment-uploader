@@ -1,6 +1,5 @@
-/** biome-ignore-all lint/style/useNodejsImportProtocol: <obsidian limit> */
+import { parse } from "node:path";
 import { normalizePath, type TFile } from "obsidian";
-import { parse } from "path";
 
 export interface Attachment {
 	basename: string;

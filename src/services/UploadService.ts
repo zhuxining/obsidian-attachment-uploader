@@ -1,7 +1,6 @@
-/** biome-ignore-all lint/style/useNodejsImportProtocol: <obsidian limit> */
-import { exec } from "child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { type Editor, type MarkdownView, Notice, TFile } from "obsidian";
-import { promisify } from "util";
 import type { Attachment } from "../attachmentMatcher";
 import { t } from "../lang/helpers";
 
