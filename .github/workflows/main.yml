@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. 1.2.0. Leave empty to use the version in manifest.json."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -47,7 +53,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="${{ github.event.inputs.tag }}"
+          if [ -z "$tag" ]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          if [ -z "$tag" ] || [ "$tag" = "refs/heads/main" ]; then
+            tag="$(node -p "require('./manifest.json').version")"
+          fi
           gh release create "$tag" \
             --title="$tag" \
             --draft \
