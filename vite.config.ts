@@ -18,4 +18,9 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
   },
+  run: {
+    tasks: {
+      ci: "tsc -noEmit -skipLibCheck && node --no-warnings esbuild.config.mjs production",
+    },
+  },
 });
