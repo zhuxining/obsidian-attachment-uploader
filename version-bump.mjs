@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 
@@ -19,3 +20,6 @@ writeFileSync("manifest.json", JSON.stringify(manifest, null, "\t"));
 const versions = JSON.parse(readFileSync("versions.json", "utf8"));
 versions[targetVersion] = minAppVersion;
 writeFileSync("versions.json", JSON.stringify(versions, null, "\t"));
+
+// stage the bumped files so `npm version` includes them in its release commit
+execSync("git add manifest.json versions.json", { stdio: "inherit" });
