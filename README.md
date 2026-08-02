@@ -6,12 +6,12 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 
 ## Features
 
-* Custom shell command for uploading
-  * Built-in [uPic](https://github.com/gee1k/uPic) upload command: `/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
-  * Built-in [Picsee](https://picsee.chitaner.com/blog/Picsee_imageClound_command.html) upload command: `"/Applications/Picsee.app/Contents/MacOS/Picsee -u %s"`
-* Customizable attachment formats to upload
-* Option to delete original attachments after upload
-* Automatic upload when pasting or dragging from outside Obsidian
+- Custom shell command for uploading
+  - Built-in [uPic](https://github.com/gee1k/uPic) upload command: `/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
+  - Built-in [Picsee](https://picsee.chitaner.com/blog/Picsee_imageClound_command.html) upload command: `"/Applications/Picsee.app/Contents/MacOS/Picsee -u %s"`
+- Customizable attachment formats to upload
+- Option to delete original attachments after upload
+- Automatic upload when pasting or dragging from outside Obsidian
 
 ## Installation
 
@@ -46,4 +46,4 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 
 ## Credits
 
-* Inspired by [typora](https://typora.io/) image upload functionality
+- Inspired by [typora](https://typora.io/) image upload functionality
