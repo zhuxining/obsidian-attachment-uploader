@@ -74,6 +74,39 @@ describe("toMarkdownUrl", () => {
       "https://cdn.example.com/my%20photo.png",
     );
   });
+
+  test("uPic 二次编码（%25）的 URL：解码为正确的单次编码", () => {
+    const doubleEncoded =
+      "https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%25E6%2588%25AA%25E5%25B1%258F%25202026-07-23%252015.40.00.jpg";
+    const expected =
+      "https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%E6%88%AA%E5%B1%8F%202026-07-23%2015.40.00.jpg";
+    expect(toMarkdownUrl(doubleEncoded)).toBe(expected);
+  });
+
+  test("含 # 的文件名：uPic 二次编码 %2523，解码后保留合法单次编码 %23", () => {
+    expect(toMarkdownUrl("https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/c%2523d.png")).toBe(
+      "https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/c%23d.png",
+    );
+  });
+
+  test("已是正确的单次编码 URL：保持不变，不二次编码（尤其 %23/%3F）", () => {
+    expect(toMarkdownUrl("https://cdn.example.com/c%23d.png")).toBe(
+      "https://cdn.example.com/c%23d.png",
+    );
+  });
+
+  test("完全未编码的中文 URL：补一次 encodeURI 归一化", () => {
+    expect(toMarkdownUrl("https://cdn.example.com/我的图.png")).toBe(
+      "https://cdn.example.com/%E6%88%91%E7%9A%84%E5%9B%BE.png",
+    );
+  });
+
+  test("含括号的二次编码 URL：解码后保留括号并用尖括号包裹", () => {
+    const doubleEncoded = "https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%25E6%2588%25AA%25E5%259B%25BE(1).png";
+    expect(toMarkdownUrl(doubleEncoded)).toBe(
+      "<https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%E6%88%AA%E5%9B%BE(1).png>",
+    );
+  });
 });
 
 // 集成测试：若本机安装了 uPic，则真实跑一次上传命令，验证端到端解析。
