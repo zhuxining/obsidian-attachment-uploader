@@ -13,7 +13,7 @@ export default {
   "Upload service": "Upload service",
   "Executed command": "Executed command",
   "The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md":
-    "The command runs via child_process.exec, with %s replaced by the local file path (keep it). After it runs, the plugin extracts the uploaded URL from the output — e.g. running `/custom-script /one.png` should print `https://domain/one.png`, which the plugin captures via regex. See README.md for the matching syntax.",
+    "Commands execute without a shell. The %s placeholder must occur exactly once as a separate argument. The executable must print the upload URL to stdout.",
   "Test file path": "Test file path",
   "Upload test": "Upload test",
   "Enter the test file path": "Enter the test file path",

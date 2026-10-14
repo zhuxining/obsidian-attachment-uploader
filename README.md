@@ -47,3 +47,7 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 ## Credits
 
 - Inspired by [typora](https://typora.io/) image upload functionality
+
+## Security: command execution
+
+Upload commands now use shell-free `execFile`. The `%s` placeholder must be a **single standalone argument** exactly once. The existing uPic and Picsee presets remain valid. Shell pipelines and variable expansion are not supported; use a trusted external executable script if required. Original attachments are moved to Obsidian trash only when no other local references are found; ambiguous cases retain the file.

@@ -12,7 +12,7 @@ export default {
   "Upload service": "上传服务",
   "Executed command": "执行命令",
   "The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md":
-    "命令通过 child_process 的 exec 方法执行，%s 会被替换为文件本地路径（请保留）。执行后插件会从输出提取上传后的网络地址——例如运行「/custom-script /one.png」应输出「https://domain/one.png」，插件用正则提取该地址。正则匹配语法详见 README_ZH.md",
+    "通过无 Shell 的方式执行上传命令，%s 必须是单独参数且只出现一次。上传程序必须向标准输出打印 URL。",
   "Test file path": "测试文件路径",
   "Upload test": "上传测试",
   "Enter the test file path": "请输入用于上传测试的文件路径",

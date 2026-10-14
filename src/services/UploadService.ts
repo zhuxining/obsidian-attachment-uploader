@@ -1,6 +1,3 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
-
 import {
   type App,
   type Editor,
@@ -13,8 +10,7 @@ import {
 import type { Attachment } from "../attachmentMatcher";
 import { t } from "../lang/helpers";
 import { extractUrl, toMarkdownUrl } from "./url";
-
-const execPromise = promisify(exec);
+import { executeUploadCommand } from "./command";
 
 const IMAGE_EXTENSION_REGEX = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i;
 
@@ -72,11 +68,11 @@ export class UploadService {
     path: string,
   ): Promise<{ success: boolean; url?: string; errorMessage?: string }> {
     try {
-      // 确保路径被正确引用，防止空格问题
-      const escapedPath = `"${path.replace(/"/g, '\\"')}"`;
-      const { stdout } = await execPromise(this.uploadCommand.replace("%s", escapedPath));
+      const stdout = await executeUploadCommand(this.uploadCommand, path);
       const url = extractUrl(stdout);
-      return url ? { success: true, url } : { success: false, errorMessage: stdout };
+      return url
+        ? { success: true, url }
+        : { success: false, errorMessage: "No valid upload URL was returned" };
     } catch (err) {
       return { success: false, errorMessage: (err as Error).message };
     }
@@ -100,14 +96,21 @@ export class UploadService {
     const uploadResult = await this.uploadServe(attachment.inSystemPath);
 
     if (uploadResult.success && uploadResult.url) {
-      this.updateEditorContent(activeEditor, attachment, uploadResult.url);
+      const replaced = this.updateEditorContent(activeEditor, attachment, uploadResult.url);
+      if (!replaced) {
+        new Notice(`${t("Upload failed:")} No local reference remains: ${attachment.inVaultPath}`);
+        return;
+      }
       new Notice(
         `${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${uploadResult.url}`,
       );
-
       if (this.isDeleteSourceFile && sourceFile instanceof TFile) {
-        await app.vault.delete(sourceFile);
-        new Notice(`${t("Local attachment deleted")}: ${attachment.inVaultPath}`);
+        // Preserve an attachment if any other note may still refer to it.
+        const safeToTrash = await this.noRemainingReferences(app as App, sourceFile);
+        if (safeToTrash) {
+          await (app as App).vault.trash(sourceFile, false);
+          new Notice(`${t("Local attachment deleted")}: ${attachment.inVaultPath}`);
+        }
       }
     } else {
       new Notice(
@@ -124,32 +127,46 @@ export class UploadService {
     editor: { editor?: { getValue: () => string; setValue: (content: string) => void } },
     attachment: Attachment,
     newUrl: string,
-  ) {
-    const content = editor.editor?.getValue() ?? "";
+  ): boolean {
+    const active = editor.editor;
+    if (!active) return false;
+    const content = active.getValue();
+    if (!content.includes(attachment.source)) return false;
+    const result = content.split(attachment.source).join(this.formatUploadedFile(attachment.name, newUrl));
+    active.setValue(result);
+    return true;
+  }
 
-    // Obsidian accepted image file formats
-    const isImage = IMAGE_EXTENSION_REGEX.test(attachment.ext);
+  formatUploadedFile(filename: string, url: string): string {
+    const target = toMarkdownUrl(url);
+    return IMAGE_EXTENSION_REGEX.test(filename)
+      ? `![${filename}](${target})`
+      : `[${filename}](${target})`;
+  }
 
-    const markdownUrl = toMarkdownUrl(newUrl);
-    const replacement = isImage
-      ? `![${attachment.name}](${markdownUrl})`
-      : `[${attachment.name}](${markdownUrl})`;
-    // 使用回调作为替换值，避免 URL 中的 $ 被当作替换模式（如 $&、$' 等）
-    const updatedContent = content.replace(attachment.source, () => replacement);
-    editor.editor?.setValue(updatedContent);
+  /** Fail closed: never delete when references remain or the scan fails. */
+  private async noRemainingReferences(app: App, file: TFile): Promise<boolean> {
+    const names = [file.name, file.path, encodeURI(file.name), encodeURI(file.path)];
+    const openEditors = new Map<string, string>();
+    for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view as MarkdownView;
+      if (view.file && view.editor) openEditors.set(view.file.path, view.editor.getValue());
+    }
+    for (const note of app.vault.getFiles()) {
+      if (note.extension !== "md" && note.extension !== "canvas") continue;
+      const content = openEditors.get(note.path) ?? await app.vault.cachedRead(note);
+      // URLs containing the same filename are not local references.
+      const withoutUrls = content.replace(/https?:\/\/[^\s<>)]+/gi, "");
+      if (names.some((name) => withoutUrls.includes(name))) return false;
+    }
+    return true;
   }
 
   /**
    * 插入上传后的文件链接
    */
   insertUploadedFile(editor: Editor, filename: string, url: string) {
-    const isImage = IMAGE_EXTENSION_REGEX.test(filename);
-    const markdownUrl = toMarkdownUrl(url);
-    const markdown = isImage ? `![${filename}](${markdownUrl})` : `[${filename}](${markdownUrl})`;
-
-    // 在当前光标位置插入
-    const cursor = editor.getCursor();
-    editor.replaceRange(markdown, cursor);
+    editor.replaceRange(this.formatUploadedFile(filename, url), editor.getCursor());
   }
 
   /**
