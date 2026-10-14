@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const UPLOAD_TIMEOUT_MS = 120_000;
+const UPLOAD_TIMEOUT_MS = 20 * 60_000; // Allow slower video uploads without an unbounded process
 const MAX_BUFFER_BYTES = 1024 * 1024;
 
 /** Split executable and arguments without expanding shell syntax. */

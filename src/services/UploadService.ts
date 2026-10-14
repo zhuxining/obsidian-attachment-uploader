@@ -183,8 +183,16 @@ export class UploadService {
         if (editor) {
           const content = editor.getValue();
 
-          const escapedPaths = [file.path, file.name].map((path) =>
+          // With duplicate basenames, a filename-only link can point to another
+          // attachment. Only rewrite the unambiguous full Vault path.
+          const filenameIsUnique = app.vault.getFiles().filter(
+            (entry) => entry.name.toLowerCase() === file.name.toLowerCase()
+          ).length === 1;
+          const paths = filenameIsUnique ? [file.path, file.name] : [file.path];
+          const escapedPaths = paths.map((path) =>
+            path.replace(/[.*+?^${}()|[\]\\]/g, "\\          const escapedPaths = [file.path, file.name].map((path) =>
             path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+          );")
           );
           let newContent = content;
           for (const escaped of escapedPaths) {

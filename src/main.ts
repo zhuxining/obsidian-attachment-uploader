@@ -172,11 +172,17 @@ export default class AttachmentUploader extends Plugin {
     if (!this.settings.uploadFileFormat.has(`.${ext}`)) return;
 
     if (this.autoUploadsInFlight.has(file.path)) return;
-    // Avoid uploading unrelated files on each vault change.
-    if (!this.app.workspace.getLeavesOfType("markdown").some((leaf) => {
+    // Only auto-upload files that a currently open note actually embeds.
+    // Merely mentioning the filename in prose must never initiate an upload.
+    const hasReference = this.app.workspace.getLeavesOfType("markdown").some((leaf) => {
       const view = leaf.view as MarkdownView;
-      return view.editor?.getValue().includes(file.name);
-    })) return;
+      if (!view.file) return false;
+      const cached = this.app.metadataCache.getFileCache(view.file);
+      return cached?.embeds?.some((embed) =>
+        this.app.metadataCache.getFirstLinkpathDest(embed.link, view.file!.path)?.path === file.path
+      ) ?? false;
+    });
+    if (!hasReference) return;
     this.autoUploadsInFlight.add(file.path);
     try {
       const basePath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
