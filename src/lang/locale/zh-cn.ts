@@ -26,5 +26,5 @@ export default {
   "Auto uploaded:": "自动上传：",
   "Auto upload": "自动上传",
   "When enabled, files will be automatically uploaded and replaced when pasting or dragging":
-    "开启后，粘贴、拖拽时会自动上传并替换文件",
+    "开启后，已打开笔记引用的本地附件修改时会尝试自动上传",
 };

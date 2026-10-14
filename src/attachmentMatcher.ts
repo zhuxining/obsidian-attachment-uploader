@@ -1,6 +1,6 @@
 import { parse } from "node:path";
 
-import { normalizePath, type DataAdapter, type FileSystemAdapter, type TFile } from "obsidian";
+import { normalizePath, type DataAdapter, type FileSystemAdapter, type TFile, type MetadataCache } from "obsidian";
 
 export interface Attachment {
   basename: string;
@@ -14,9 +14,9 @@ export interface Attachment {
 }
 
 export class AttachmentMatcher {
-  private app: { vault: { getFiles: () => TFile[]; adapter: DataAdapter } };
+  private app: { vault: { getFiles: () => TFile[]; adapter: DataAdapter }; metadataCache?: MetadataCache };
 
-  constructor(app: { vault: { getFiles: () => TFile[]; adapter: DataAdapter } }) {
+  constructor(app: { vault: { getFiles: () => TFile[]; adapter: DataAdapter }; metadataCache?: MetadataCache }) {
     this.app = app;
   }
 
@@ -24,15 +24,15 @@ export class AttachmentMatcher {
    * 获取编辑器中所有的附件
    * 解析编辑器内容，找出符合条件的附件，条件为符合markdown链接格式![]()
    */
-  getEditorAttachments(markdownFile: { editor?: { getValue: () => string } }): Attachment[] {
+  getEditorAttachments(markdownFile: { editor?: { getValue: () => string }; file?: TFile | null }): Attachment[] {
     const content = markdownFile.editor?.getValue() ?? "";
-    const regex = /!\[(.*?)\]\((.*?)\)|!\[\[([^\]]+)\]\]/g;
+    const regex = /!\[\[([^\]]+)\]\]|!\[[^\]\n]*\]\((<[^>\n]+>|(?:\\.|[^()\\\n]|\([^()]*\))+)\)/g;
     const matches = content.match(regex);
     if (!matches) return [];
 
     const vaultSystemPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     return matches
-      .map((match: string) => this.parseAttachment(match, vaultSystemPath))
+      .map((match: string) => this.parseAttachment(match, vaultSystemPath, markdownFile.file?.path ?? ""))
       .filter((attachment: Attachment | null): attachment is Attachment => attachment !== null);
   }
 
@@ -40,18 +40,16 @@ export class AttachmentMatcher {
    * 解析单个附件
    * 从匹配的字符串中提取附件信息
    */
-  private parseAttachment(match: string, vaultSystemPath: string): Attachment | null {
+  private parseAttachment(match: string, vaultSystemPath: string, notePath: string): Attachment | null {
     let attSourcePath: string | undefined;
     let alt: string | undefined;
 
-    // Handle ![]() format
-    if (match.includes("(") && match.includes(")")) {
-      attSourcePath = match.match(/\((.*?)\)/)?.[1];
-      alt = match.match(/\[(.*?)\]/)?.[1];
-    }
-    // Handle ![[]] format
-    else if (match.startsWith("![[") && match.endsWith("]]")) {
-      attSourcePath = match.match(/\[\[(.*?)\]\]/)?.[1];
+    if (match.startsWith("![[") && match.endsWith("]]")) {
+      attSourcePath = match.slice(3, -2).split("|")[0];
+    } else {
+      const markdown = /^!\[[^\]]*\]\((.*)\)$/.exec(match);
+      attSourcePath = markdown?.[1]?.replace(/^<|>$/g, "");
+      alt = match.match(/^!\[([^\]]*)\]/)?.[1];
     }
 
     if (!attSourcePath) return null;
@@ -63,23 +61,25 @@ export class AttachmentMatcher {
     } catch {
       decodedPath = attSourcePath;
     }
-    const file = parse(normalizePath(decodedPath));
+    const parsedName = parse(normalizePath(decodedPath));
 
-    // 使用更精确的文件查找方法
-    const searchFile = this.app.vault
-      .getFiles()
-      .find(
-        (f: TFile) =>
-          f.path.toLowerCase() === normalizePath(decodedPath).toLowerCase() ||
-          f.name.toLowerCase() === (file.name + file.ext).toLowerCase(),
-      );
+    const files = this.app.vault.getFiles();
+    const resolved = this.app.metadataCache?.getFirstLinkpathDest(decodedPath, notePath);
+    const exactMatch = files.find((file) =>
+      file.path.toLowerCase() === normalizePath(decodedPath).toLowerCase()
+    );
+    const sameNames = files.filter((file) =>
+      file.name.toLowerCase() === (parsedName.name + parsedName.ext).toLowerCase()
+    );
+    // An ambiguous basename must never silently upload another folder's file.
+    const searchFile = resolved ?? exactMatch ?? (sameNames.length === 1 ? sameNames[0] : undefined);
 
     return {
       source: match,
       alt: alt ?? file.name,
-      basename: file.base,
-      name: file.name,
-      ext: file.ext,
+      basename: parsedName.base,
+      name: parsedName.name,
+      ext: parsedName.ext,
       existenceState: attSourcePath.startsWith("http")
         ? "network"
         : searchFile

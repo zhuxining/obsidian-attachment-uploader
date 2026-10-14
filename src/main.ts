@@ -13,18 +13,21 @@ import { AttachmentMatcher } from "./attachmentMatcher";
 import { t } from "./lang/helpers";
 import { UploadService } from "./services/UploadService";
 import { DEFAULT_SETTINGS, type PluginSettings, SettingTab } from "./settingsTab";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 
 export default class AttachmentUploader extends Plugin {
   declare settings: PluginSettings;
+  private readonly autoUploadsInFlight = new Set<string>();
   private _attachmentMatcher?: AttachmentMatcher;
-  private _uploadService?: UploadService;
 
   /**
    * 懒加载附件匹配器
    */
   get attachmentMatcher(): AttachmentMatcher {
     if (!this._attachmentMatcher) {
-      this._attachmentMatcher = new AttachmentMatcher({ vault: this.app.vault });
+      this._attachmentMatcher = new AttachmentMatcher({ vault: this.app.vault, metadataCache: this.app.metadataCache });
     }
     return this._attachmentMatcher;
   }
@@ -33,14 +36,13 @@ export default class AttachmentUploader extends Plugin {
    * 懒加载上传服务
    */
   get uploadService(): UploadService {
-    if (!this._uploadService) {
-      this._uploadService = new UploadService(
-        this.settings.uploadCommand,
-        this.settings.isDeleteSourceFile,
-        this.settings.uploadFileFormat,
-      );
-    }
-    return this._uploadService;
+    // Read the current settings on each operation; the previous cached
+    // instance silently ignored upload command/format changes.
+    return new UploadService(
+      this.settings.uploadCommand,
+      this.settings.isDeleteSourceFile,
+      this.settings.uploadFileFormat,
+    );
   }
 
   /**
@@ -169,13 +171,22 @@ export default class AttachmentUploader extends Plugin {
     const ext = file.extension.toLowerCase();
     if (!this.settings.uploadFileFormat.has(`.${ext}`)) return;
 
-    // 上传文件并替换链接
-    const basePath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
-    const uploadResult = await this.uploadService.uploadServe(`${basePath}/${file.path}`);
-    if (uploadResult.success && uploadResult.url) {
-      // 在所有打开的编辑器中替换该文件的链接
-      await this.uploadService.replaceLocalLinksInAllEditors(this.app, file, uploadResult.url);
-      new Notice(`${t("Auto uploaded:")} ${file.name}`);
+    if (this.autoUploadsInFlight.has(file.path)) return;
+    // Avoid uploading unrelated files on each vault change.
+    if (!this.app.workspace.getLeavesOfType("markdown").some((leaf) => {
+      const view = leaf.view as MarkdownView;
+      return view.editor?.getValue().includes(file.name);
+    })) return;
+    this.autoUploadsInFlight.add(file.path);
+    try {
+      const basePath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+      const result = await this.uploadService.uploadServe(join(basePath, file.path));
+      if (result.success && result.url) {
+        await this.uploadService.replaceLocalLinksInAllEditors(this.app, file, result.url);
+        new Notice(`${t("Auto uploaded:")} ${file.name}`);
+      }
+    } finally {
+      this.autoUploadsInFlight.delete(file.path);
     }
   }
 
@@ -184,25 +195,57 @@ export default class AttachmentUploader extends Plugin {
    * 粘贴与拖拽共用同一套上传+插入逻辑
    */
   private async uploadAndInsert(file: File, editor: Editor) {
-    const tempPath = await this.saveTempFile(file);
-    const uploadResult = await this.uploadService.uploadServe(tempPath);
-
-    if (uploadResult.success && uploadResult.url) {
-      this.uploadService.insertUploadedFile(editor, file.name, uploadResult.url);
+    const marker = `<!-- attachment-uploader:${crypto.randomUUID()} -->`;
+    editor.replaceSelection(marker);
+    const filename = basename(file.name.replace(/[\\/]/g, "_")) || "attachment.bin";
+    let directory: string | null = null;
+    try {
+      directory = await mkdtemp(join(tmpdir(), "obsidian-attachment-uploader-"));
+      const temporaryFile = join(directory, filename);
+      await writeFile(temporaryFile, Buffer.from(await file.arrayBuffer()), { flag: "wx" });
+      const result = await this.uploadService.uploadServe(temporaryFile);
+      if (result.success && result.url) {
+        const didReplace = this.replaceMarker(editor, marker, this.uploadService.formatUploadedFile(filename, result.url));
+        if (!didReplace) new Notice(`Uploaded ${filename}, but insertion was cancelled. URL: ${result.url}`, 10000);
+      } else {
+        await this.fallbackToVault(file, editor, marker);
+        new Notice(`Cloud upload failed: ${result.errorMessage ?? "Unknown error"}`, 7000);
+      }
+    } catch (error) {
+      await this.fallbackToVault(file, editor, marker);
+      new Notice(`Cloud upload failed: ${String(error)}`, 7000);
+    } finally {
+      if (directory) {
+        try { await rm(directory, { recursive: true, force: true }); }
+        catch (error) { new Notice(`Could not clean up temporary upload: ${String(error)}`); }
+      }
     }
   }
 
-  /**
-   * 保存临时文件
-   */
-  private async saveTempFile(file: File): Promise<string> {
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const tempDir = require("node:os").tmpdir();
-    const tempPath = require("node:path").join(tempDir, file.name);
+  private replaceMarker(editor: Editor, marker: string, replacement: string): boolean {
+    const text = editor.getValue();
+    const index = text.indexOf(marker);
+    if (index < 0) return false;
+    editor.replaceRange(replacement, editor.offsetToPos(index), editor.offsetToPos(index + marker.length));
+    return true;
+  }
 
-    require("node:fs").writeFileSync(tempPath, buffer);
-    return tempPath;
+  private async fallbackToVault(file: File, editor: Editor, marker: string): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+    try {
+      const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, activeFile?.path);
+      const saved = await this.app.vault.createBinary(path, await file.arrayBuffer());
+      const link = this.app.fileManager.generateMarkdownLink(saved, activeFile?.path ?? "");
+      const extension = saved.extension.toLowerCase();
+      const embed = /^(png|jpe?g|gif|svg|webp|avif|bmp|mp3|wav|m4a|mp4|webm|mov|pdf)$/.test(extension);
+      const markup = embed && !link.startsWith("!") ? `!${link}` : link;
+      if (!this.replaceMarker(editor, marker, markup)) {
+        new Notice(`Attachment saved locally but placeholder was removed: ${saved.path}`, 10000);
+      }
+    } catch (error) {
+      // A pasted File is otherwise ephemeral. Keep an explicit recovery marker.
+      new Notice(`Failed to preserve attachment locally: ${String(error)}`, 10000);
+    }
   }
 
   /**

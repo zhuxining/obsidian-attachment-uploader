@@ -51,3 +51,5 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 ## Security: command execution
 
 Upload commands now use shell-free `execFile`. The `%s` placeholder must be a **single standalone argument** exactly once. The existing uPic and Picsee presets remain valid. Shell pipelines and variable expansion are not supported; use a trusted external executable script if required. Original attachments are moved to Obsidian trash only when no other local references are found; ambiguous cases retain the file.
+
+Cloud upload failures for pasted or dragged files now fall back to a local Vault attachment. Temporary upload files use unique folders and are removed after upload. The auto-upload setting handles modifications of existing attachments, not clipboard or drag uploads.
