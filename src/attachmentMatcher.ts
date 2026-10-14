@@ -76,7 +76,7 @@ export class AttachmentMatcher {
 
     return {
       source: match,
-      alt: alt ?? file.name,
+      alt: alt ?? parsedName.name,
       basename: parsedName.base,
       name: parsedName.name,
       ext: parsedName.ext,

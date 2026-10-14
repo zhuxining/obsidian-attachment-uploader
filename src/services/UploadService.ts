@@ -183,18 +183,16 @@ export class UploadService {
         if (editor) {
           const content = editor.getValue();
 
-          // 创建匹配本地文件链接的正则表达式
-          const fileNamePattern = file.name.replace(/([.*+?^=!:${}()[\]/\\])/g, "\\$1");
-          const localLinkRegex = new RegExp(`![([^]]*)](${fileNamePattern})`, "g");
-
-          // 替换所有匹配的链接
-          const newContent = content.replace(localLinkRegex, (_match: string, altText: string) => {
-            const isImage = IMAGE_EXTENSION_REGEX.test(file.name);
-            const markdownUrl = toMarkdownUrl(newUrl);
-            return isImage
-              ? `![${altText || file.name}](${markdownUrl})`
-              : `[${altText || file.name}](${markdownUrl})`;
-          });
+          const escapedPaths = [file.path, file.name].map((path) =>
+            path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+          );
+          let newContent = content;
+          for (const escaped of escapedPaths) {
+            const wiki = new RegExp(`!\\[\\[${escaped}(?:\\|[^\\]]+)?\\]\\]`, "g");
+            const markdown = new RegExp(`!\\[([^\\]]*)\\]\\(<?${escaped}>?\\)`, "g");
+            newContent = newContent.replace(wiki, () => this.formatUploadedFile(file.name, newUrl));
+            newContent = newContent.replace(markdown, () => this.formatUploadedFile(file.name, newUrl));
+          }
 
           // 如果内容有变化，更新编辑器
           if (newContent !== content) {
