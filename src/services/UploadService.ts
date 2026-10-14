@@ -190,9 +190,7 @@ export class UploadService {
           ).length === 1;
           const paths = filenameIsUnique ? [file.path, file.name] : [file.path];
           const escapedPaths = paths.map((path) =>
-            path.replace(/[.*+?^${}()|[\]\\]/g, "\\          const escapedPaths = [file.path, file.name].map((path) =>
-            path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-          );")
+            path.replace(/[.*+?^${}()|[\]\\]/g, (match) => "\\" + match)
           );
           let newContent = content;
           for (const escaped of escapedPaths) {
