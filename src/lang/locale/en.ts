@@ -26,6 +26,6 @@ export default {
   "Delete local files after successful upload": "Delete local files after successful upload",
   "Auto uploaded:": "Auto uploaded:",
   "Auto upload": "Auto upload",
-  "When enabled, modified local attachments referenced in open notes can upload automatically":
-    "When enabled, files will be automatically uploaded and replaced when pasting or dragging",
+  "When enabled, files will be automatically uploaded and replaced when pasting or dragging":
+    "When enabled, modified local attachments referenced in open notes can upload automatically",
 };
