@@ -3,9 +3,50 @@ import { type App, type Editor, type MarkdownView, Notice, TFile } from "obsidia
 import { AttachmentMatcher, type Attachment } from "../attachmentMatcher";
 import { t } from "../lang/helpers";
 import { executeUploadCommand } from "./command";
+import { preserveUploadReceipt } from "./uploadReceipts";
 import { extractUrl, toMarkdownUrl } from "./url";
 
 const IMAGE_EXTENSION_REGEX = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i;
+const MAX_REFERENCE_DECODE_PASSES = 4;
+const MAX_SCAN_NOTES = 128;
+const MAX_SCAN_CHARACTERS = 4 * 1024 * 1024;
+const MAX_TEXT_CHARACTERS = 256 * 1024;
+const MAX_SCAN_MS = 100;
+const SCAN_YIELD_INTERVAL = 16;
+const REMOTE_LINK_REGEX =
+  /!?\[(?:\\.|[^\]\\\n])*\]\((?:<https?:\/\/[^>\n]*>|https?:\/\/[^\s()<>]*(?:\([^\s()<>]*\)[^\s()<>]*)*)\)/gi;
+const REMOTE_URL_REGEX = /https?:\/\/[^\s<>)]+/gi;
+const PERCENT_BYTES_REGEX = /(?:%[\da-f]{2})+/gi;
+const HTML_ENTITY_REGEX = /&(?:#\d+|#x[\da-f]+|[a-z][\da-z]*);/i;
+
+/** Unknown encodings are evidence to preserve the source, not proof of absence. */
+function mayReferenceFile(content: string, file: TFile): boolean {
+  if (content.length > MAX_TEXT_CHARACTERS) return true;
+  let text = content.replace(REMOTE_LINK_REGEX, "").replace(REMOTE_URL_REGEX, "");
+  for (let pass = 0; pass < MAX_REFERENCE_DECODE_PASSES; pass++) {
+    if (text.includes(file.name) || text.includes(file.path)) return true;
+    if (HTML_ENTITY_REGEX.test(text)) return true;
+    const decoded = text.replace(PERCENT_BYTES_REGEX, (bytes) => {
+      try {
+        return decodeURIComponent(bytes);
+      } catch {
+        // Decode valid ASCII escapes even next to malformed UTF-8 bytes.
+        return bytes.replace(/%([\da-f]{2})/gi, (escape, hex: string) => {
+          const byte = Number.parseInt(hex, 16);
+          return byte < 0x80 ? String.fromCharCode(byte) : escape;
+        });
+      }
+    });
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return (
+    text.includes(file.name) ||
+    text.includes(file.path) ||
+    /%/.test(text) ||
+    HTML_ENTITY_REGEX.test(text)
+  );
+}
 
 export type UploadResult = { success: boolean; url?: string; errorMessage?: string };
 export type UploadTasks = Map<string, Promise<UploadResult>>;
@@ -120,23 +161,52 @@ export class UploadService {
     )
       return;
     const sourceFile = app.vault.getAbstractFileByPath(attachment.inVaultPath);
+    const sourcePath = sourceFile?.path;
+    let sourceStat: { size: number; mtime: number } | null = null;
+    if (this.isDeleteSourceFile && sourceFile instanceof TFile) {
+      try {
+        const stat = await app.vault.adapter.stat(sourceFile.path);
+        if (stat?.type === "file") sourceStat = { size: stat.size, mtime: stat.mtime };
+      } catch {
+        // Stat failure must not prevent uploading; it only disables deletion.
+      }
+    }
     const uploadResult = await this.uploadServe(attachment.inSystemPath);
 
     if (uploadResult.success && uploadResult.url) {
       // A view can be reused for a different note while the command is running.
-      if (activeEditor.file !== sourceNote) return;
-      const replaced = this.updateEditorContent(activeEditor, attachment, uploadResult.url, app);
+      let replaced = false;
+      try {
+        if (activeEditor.file === sourceNote)
+          replaced = this.updateEditorContent(activeEditor, attachment, uploadResult.url, app);
+      } catch {
+        // The command already succeeded; retain its result independently of the editor.
+      }
       if (!replaced) {
-        new Notice(`${t("Upload failed:")} No local reference remains: ${attachment.inVaultPath}`);
+        await preserveUploadReceipt(uploadResult.url, attachment.inSystemPath, attachment.basename);
         return;
       }
       new Notice(
         `${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${uploadResult.url}`,
       );
-      if (this.isDeleteSourceFile && sourceFile instanceof TFile) {
+      if (this.isDeleteSourceFile && sourceFile instanceof TFile && sourceStat) {
         // Preserve an attachment if any other note may still refer to it.
         const safeToTrash = await this.noRemainingReferences(app, sourceFile);
         if (safeToTrash) {
+          try {
+            const stat = await app.vault.adapter.stat(sourceFile.path);
+            if (
+              sourceFile.path !== sourcePath ||
+              app.vault.getAbstractFileByPath(sourceFile.path) !== sourceFile ||
+              stat?.type !== "file" ||
+              stat.size !== sourceStat.size ||
+              stat.mtime !== sourceStat.mtime ||
+              !this.noOpenReferences(app, sourceFile)
+            )
+              return;
+          } catch {
+            return;
+          }
           await app.fileManager.trashFile(sourceFile);
           new Notice(`${t("Local attachment deleted")}: ${attachment.inVaultPath}`);
         }
@@ -184,21 +254,51 @@ export class UploadService {
 
   /** Fail closed: never delete when references remain or the scan fails. */
   private async noRemainingReferences(app: App, file: TFile): Promise<boolean> {
-    const names = [file.name, file.path, encodeURI(file.name), encodeURI(file.path)];
-    const openEditors = new Map<string, string>();
+    try {
+      const started = performance.now();
+      let notesRead = 0;
+      let charactersRead = 0;
+      if (!this.noOpenReferences(app, file)) return false;
+      for (const note of app.vault.getFiles()) {
+        if (performance.now() - started >= MAX_SCAN_MS) return false;
+        if (note.extension !== "md" && note.extension !== "canvas") continue;
+        if (notesRead >= MAX_SCAN_NOTES || performance.now() - started >= MAX_SCAN_MS) return false;
+        if (notesRead > 0 && notesRead % SCAN_YIELD_INTERVAL === 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          if (performance.now() - started >= MAX_SCAN_MS) return false;
+        }
+        const content = await app.vault.cachedRead(note);
+        notesRead++;
+        charactersRead += content.length;
+        if (charactersRead > MAX_SCAN_CHARACTERS || performance.now() - started >= MAX_SCAN_MS)
+          return false;
+        if (mayReferenceFile(content, file)) return false;
+        if (note.extension === "canvas") {
+          // JSON.parse resolves Unicode and slash escapes in canvas file nodes.
+          const canvas: unknown = JSON.parse(content);
+          if (mayReferenceFile(JSON.stringify(canvas), file)) return false;
+        }
+      }
+      return performance.now() - started < MAX_SCAN_MS && this.noOpenReferences(app, file);
+    } catch {
+      return false;
+    }
+  }
+
+  private noOpenReferences(app: App, file: TFile): boolean {
+    const started = performance.now();
+    let characters = 0;
     for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+      if (performance.now() - started >= MAX_SCAN_MS) return false;
       if (leaf.isDeferred) continue;
       const view = leaf.view as MarkdownView;
-      if (view.file && view.editor) openEditors.set(view.file.path, view.editor.getValue());
+      if (view.editor) {
+        const content = view.editor.getValue();
+        characters += content.length;
+        if (characters > MAX_SCAN_CHARACTERS || mayReferenceFile(content, file)) return false;
+      }
     }
-    for (const note of app.vault.getFiles()) {
-      if (note.extension !== "md" && note.extension !== "canvas") continue;
-      const content = openEditors.get(note.path) ?? (await app.vault.cachedRead(note));
-      // URLs containing the same filename are not local references.
-      const withoutUrls = content.replace(/https?:\/\/[^\s<>)]+/gi, "");
-      if (names.some((name) => withoutUrls.includes(name))) return false;
-    }
-    return true;
+    return performance.now() - started < MAX_SCAN_MS;
   }
 
   /**

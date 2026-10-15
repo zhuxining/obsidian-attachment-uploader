@@ -1,5 +1,5 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import {
@@ -15,6 +15,7 @@ import {
 
 import { AttachmentMatcher } from "./attachmentMatcher";
 import { t } from "./lang/helpers";
+import { preserveUploadReceipt } from "./services/uploadReceipts";
 import { UploadService, type UploadTasks } from "./services/uploadService";
 import { parseSettings, serializeSettings, type PluginSettings } from "./settings";
 import { SettingTab } from "./settingsTab";
@@ -215,12 +216,18 @@ export default class AttachmentUploader extends Plugin {
       const basePath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
       const result = await this.uploadService.uploadServe(join(basePath, file.path));
       if (result.success && result.url) {
-        const replacements = await this.uploadService.replaceLocalLinksInAllEditors(
-          this.app,
-          file,
-          result.url,
-        );
+        let replacements = 0;
+        try {
+          replacements = await this.uploadService.replaceLocalLinksInAllEditors(
+            this.app,
+            file,
+            result.url,
+          );
+        } catch {
+          // Some editors may have changed before another editor threw.
+        }
         if (replacements > 0) new Notice(`${t("Auto uploaded:")} ${file.name}`);
+        else await preserveUploadReceipt(result.url, join(basePath, file.path), file.name);
       }
     } finally {
       this.autoUploadsInFlight.delete(file.path);
@@ -241,32 +248,54 @@ export default class AttachmentUploader extends Plugin {
     if (!reservedMarker) editor.replaceSelection(marker);
     const filename = basename(file.name.replace(/[\\/]/g, "_")) || "attachment.bin";
     let directory: string | null = null;
+    let safelyStored = false;
     try {
       directory = await mkdtemp(join(tmpdir(), "obsidian-attachment-uploader-"));
       const temporaryFile = join(directory, filename);
       await writeFile(temporaryFile, Buffer.from(await file.arrayBuffer()), { flag: "wx" });
       const result = await this.uploadService.uploadServe(temporaryFile);
       if (result.success && result.url) {
-        const didReplace = await this.replaceSourceMarker(
-          editor,
-          marker,
-          this.uploadService.formatUploadedFile(filename, result.url),
-          sourcePath,
-        );
-        if (!didReplace)
-          new Notice(
-            `Uploaded ${filename}, but insertion was cancelled. URL: ${result.url}`,
-            10000,
+        safelyStored = true;
+        let didReplace = false;
+        try {
+          didReplace = await this.replaceSourceMarker(
+            editor,
+            marker,
+            this.uploadService.formatUploadedFile(filename, result.url),
+            sourcePath,
           );
+        } catch {
+          // A successful upload must not be reported as a failed cloud command.
+        }
+        if (!didReplace) await preserveUploadReceipt(result.url, sourcePath, filename);
       } else {
-        await this.fallbackToVault(file, editor, marker, sourcePath);
+        safelyStored = await this.fallbackToVault(file, editor, marker, sourcePath);
         new Notice(`Cloud upload failed: ${result.errorMessage ?? "Unknown error"}`, 7000);
       }
     } catch (error) {
-      await this.fallbackToVault(file, editor, marker, sourcePath);
+      safelyStored = await this.fallbackToVault(file, editor, marker, sourcePath);
       new Notice(`Cloud upload failed: ${String(error)}`, 7000);
     } finally {
-      if (directory) {
+      if (!safelyStored) {
+        try {
+          const recoveryRoot = join(homedir(), ".obsidian-attachment-uploader-recovery");
+          await mkdir(recoveryRoot, { recursive: true, mode: 0o700 });
+          const recoveryDirectory = await mkdtemp(join(recoveryRoot, "attachment-"));
+          const recoveryPath = join(recoveryDirectory, filename);
+          await writeFile(recoveryPath, Buffer.from(await file.arrayBuffer()), {
+            flag: "wx",
+            mode: 0o600,
+          });
+          safelyStored = true;
+          new Notice(`${t("Attachment recovery copy saved:")} ${recoveryPath}`, 0);
+        } catch (error) {
+          new Notice(
+            `${t("Attachment recovery failed; temporary copy retained:")} ${directory ?? t("Unavailable")}\n${String(error)}`,
+            0,
+          );
+        }
+      }
+      if (directory && safelyStored) {
         try {
           await rm(directory, { recursive: true, force: true });
         } catch (error) {
@@ -300,7 +329,7 @@ export default class AttachmentUploader extends Plugin {
       if (leaf.isDeferred) continue;
       const view = leaf.view as MarkdownView;
       if (view.file?.path !== sourcePath || !view.editor) continue;
-      return this.replaceMarker(view.editor, marker, replacement);
+      if (this.replaceMarker(view.editor, marker, replacement)) return true;
     }
     const file = this.app.vault.getFileByPath(sourcePath);
     if (!file) return false;
@@ -318,10 +347,12 @@ export default class AttachmentUploader extends Plugin {
     editor: Editor,
     marker: string,
     sourcePath: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    let storedPath: string | null = null;
     try {
       const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, sourcePath);
       const saved = await this.app.vault.createBinary(path, await file.arrayBuffer());
+      storedPath = saved.path;
       const link = this.app.fileManager.generateMarkdownLink(saved, sourcePath);
       const extension = saved.extension.toLowerCase();
       const embed = /^(png|jpe?g|gif|svg|webp|avif|bmp|mp3|wav|m4a|mp4|webm|mov|pdf)$/.test(
@@ -331,8 +362,14 @@ export default class AttachmentUploader extends Plugin {
       if (!(await this.replaceSourceMarker(editor, marker, markup, sourcePath))) {
         new Notice(`Attachment saved locally but placeholder was removed: ${saved.path}`, 10000);
       }
+      return true;
     } catch (error) {
+      if (storedPath) {
+        new Notice(`${t("Attachment recovery copy saved:")} ${storedPath}\n${String(error)}`, 0);
+        return true;
+      }
       new Notice(`Failed to preserve attachment locally: ${String(error)}`, 10000);
+      return false;
     }
   }
 

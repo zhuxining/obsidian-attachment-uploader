@@ -1,4 +1,7 @@
 export default {
+  "Attachment recovery copy saved:": "附件恢复副本已保存：",
+  "Attachment recovery failed; temporary copy retained:": "附件恢复失败；已保留临时副本：",
+  Unavailable: "不可用",
   "Upload attachments": "上传附件",
   "No local attachment matching the upload conditions was found.": "未找到符合上传条件的本地附件",
   "attachments that matched the upload conditions \n Start uploading and replacing...":
@@ -23,6 +26,9 @@ export default {
   "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
     "符合配置格式的文件，会在执行命令时被上传并用网络地址替换原地址，格式以英文逗号分隔",
   "Delete local files after successful upload": "上传成功后删除本地文件",
+  "Upload succeeded but was not applied. Recovery receipt:": "上传成功但未应用。恢复回执：",
+  "Upload succeeded but recovery receipt could not be saved. URL:":
+    "上传成功，但无法保存恢复回执。URL：",
   "Auto uploaded:": "自动上传：",
   "Auto upload": "自动上传",
   "When enabled, files will be automatically uploaded and replaced when pasting or dragging":

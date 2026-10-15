@@ -1,4 +1,8 @@
 export default {
+  "Attachment recovery copy saved:": "Attachment recovery copy saved:",
+  "Attachment recovery failed; temporary copy retained:":
+    "Attachment recovery failed; temporary copy retained:",
+  Unavailable: "Unavailable",
   "Upload attachments": "Upload attachments",
   "No local attachment matching the upload conditions was found.":
     "No local attachment matching the upload conditions was found.",
@@ -24,6 +28,10 @@ export default {
   "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
     "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.",
   "Delete local files after successful upload": "Delete local files after successful upload",
+  "Upload succeeded but was not applied. Recovery receipt:":
+    "Upload succeeded but was not applied. Recovery receipt:",
+  "Upload succeeded but recovery receipt could not be saved. URL:":
+    "Upload succeeded but recovery receipt could not be saved. URL:",
   "Auto uploaded:": "Auto uploaded:",
   "Auto upload": "Auto upload",
   "When enabled, files will be automatically uploaded and replaced when pasting or dragging":
