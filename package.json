@@ -17,6 +17,9 @@
     "check": "vp check --fix",
     "test": "vp test run"
   },
+  "dependencies": {
+    "mdast-util-from-markdown": "^2.1.0"
+  },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "obsidian": "^1.14.4",
