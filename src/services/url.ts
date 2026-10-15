@@ -4,21 +4,27 @@
  */
 export function extractUrl(stdout: string): string | null {
   const lines = stdout.split(/\r?\n/).map((line) => line.trim());
+  const labelled = new Set<string>();
+  const standalone = new Set<string>();
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
     const prefix = /^(?:Output URL|Uploaded|result|URL):\s*(https?:\/\/.*)$/i.exec(line);
-    const nextLine = /^(?:Output URL|Uploaded|URL):?$/i.test(line);
+    const nextLine = /^(?:Output URL|Uploaded|result|URL):?$/i.test(line);
     let candidate = (prefix?.[1] ?? (nextLine ? lines[i + 1] : line) ?? "").trim();
     candidate = candidate.replace(/^["']|["']$/g, "");
     if (!/^https?:\/\//i.test(candidate)) continue;
     try {
       const result = new URL(candidate);
-      if (["http:", "https:"].includes(result.protocol) && result.hostname) return candidate;
+      if (["http:", "https:"].includes(result.protocol) && result.hostname) {
+        (prefix || nextLine ? labelled : standalone).add(candidate);
+        if (nextLine) i += 1;
+      }
     } catch {
       /* invalid URL, try the next line */
     }
   }
-  return null;
+  const candidates = labelled.size > 0 ? labelled : standalone;
+  return candidates.size === 1 ? [...candidates][0]! : null;
 }
 
 /**

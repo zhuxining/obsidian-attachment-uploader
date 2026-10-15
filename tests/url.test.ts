@@ -44,6 +44,37 @@ describe("extractUrl", () => {
   test("http（非 https）也能提取", () => {
     expect(extractUrl("result: http://example.com/x.png")).toBe("http://example.com/x.png");
   });
+
+  test("显式结果标签优先于裸 help URL", () => {
+    expect(
+      extractUrl("https://example.com/help\nOutput URL: https://cdn.example.com/image.png"),
+    ).toBe("https://cdn.example.com/image.png");
+  });
+
+  test("多个不同裸 URL：拒绝歧义结果", () => {
+    expect(extractUrl("https://cdn.example.com/a.png\nhttps://cdn.example.com/b.png")).toBeNull();
+  });
+
+  test("多个不同显式结果 URL：拒绝歧义结果", () => {
+    expect(
+      extractUrl(
+        "Output URL: https://cdn.example.com/a.png\nresult: https://cdn.example.com/b.png",
+      ),
+    ).toBeNull();
+  });
+
+  test.each([
+    "https://cdn.example.com/a.png\nhttps://cdn.example.com/a.png",
+    "Output URL: https://cdn.example.com/a.png\nresult: https://cdn.example.com/a.png",
+  ])("重复同一 URL：接受唯一结果（%s）", (stdout) => {
+    expect(extractUrl(stdout)).toBe("https://cdn.example.com/a.png");
+  });
+
+  test("result 下一行的 URL：识别为显式结果", () => {
+    expect(extractUrl("https://example.com/help\nresult:\nhttps://cdn.example.com/image.png")).toBe(
+      "https://cdn.example.com/image.png",
+    );
+  });
 });
 
 describe("toMarkdownUrl", () => {
