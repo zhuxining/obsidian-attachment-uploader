@@ -1,7 +1,8 @@
 import { type App, type Plugin, Notice, PluginSettingTab, Setting } from "obsidian";
 
 import { t } from "./lang/helpers";
-import { uploadCommandDict } from "./services/UploadService";
+import { uploadCommandDict } from "./services/presets";
+import { isUploadServiceName, parseUploadFormats, type PluginSettings } from "./settings";
 
 interface PluginLike {
   settings: PluginSettings;
@@ -9,30 +10,12 @@ interface PluginLike {
   uploadServe: (path: string) => Promise<{ success: boolean; url?: string; errorMessage?: string }>;
 }
 
-export interface PluginSettings {
-  uploadService: string;
-  uploadCommand: string;
-  testFilePath: string;
-  uploadFileFormat: Set<string>;
-  isDeleteSourceFile: boolean;
-  autoUploadOnSave: boolean;
-}
-
-export const DEFAULT_SETTINGS: PluginSettings = {
-  uploadService: "uPic",
-  uploadCommand: uploadCommandDict.uPic,
-  uploadFileFormat: new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".bmp"]),
-  testFilePath: "",
-  isDeleteSourceFile: false,
-  autoUploadOnSave: false,
-};
-
 export class SettingTab extends PluginSettingTab {
   plugin: PluginLike;
 
-  constructor(app: App, plugin: Plugin) {
+  constructor(app: App, plugin: Plugin & PluginLike) {
     super(app, plugin);
-    this.plugin = plugin as unknown as PluginLike;
+    this.plugin = plugin;
   }
 
   /**
@@ -61,6 +44,7 @@ export class SettingTab extends PluginSettingTab {
         })
         .setValue(this.plugin.settings.uploadService)
         .onChange(async (value) => {
+          if (!isUploadServiceName(value)) return;
           this.plugin.settings.uploadService = value;
           this.plugin.settings.uploadCommand = uploadCommandDict[value];
           await this.plugin.saveSettings();
@@ -96,7 +80,7 @@ export class SettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("Test file path"))
       .addText((text) =>
-        text.onChange(async (value) => {
+        text.setValue(this.plugin.settings.testFilePath).onChange(async (value) => {
           this.plugin.settings.testFilePath = value;
           await this.plugin.saveSettings();
         }),
@@ -134,12 +118,7 @@ export class SettingTab extends PluginSettingTab {
         textArea
           .setValue(Array.from(this.plugin.settings.uploadFileFormat).join(", "))
           .onChange(async (value) => {
-            const formats = value
-              .split(/[,\s]+/)
-              .map((format) => format.trim().toLowerCase())
-              .filter(Boolean)
-              .map((format) => (format.startsWith(".") ? format : `.${format}`));
-            this.plugin.settings.uploadFileFormat = new Set(formats);
+            this.plugin.settings.uploadFileFormat = parseUploadFormats(value);
             await this.plugin.saveSettings();
           })
           .inputEl.setAttribute("rows", "4"),
