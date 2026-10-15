@@ -1,15 +1,22 @@
+# 兼容性
+
+需要 Obsidian 桌面版 **1.14.4 或更高版本**。上传依赖本地可执行程序，不支持移动端。
+
 # obsidian-attachment-uploader
 
-这个 Obsidian 插件可以帮助你上传本地附件到云存储,上传shell命令可以自定义,要上传附件的格式可自定义。
+这个 Obsidian 插件可以帮助你上传本地附件到云存储，支持自定义上传命令和需要上传的附件格式。
 
 ## 功能
 
-- 支持自定义shell命令进行上传
+- 支持自定义上传命令
   - 内置[uPic](https://github.com/gee1k/uPic)上传命令`/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
   - 内置[Picsee](https://picsee.chitaner.com/blog/Picsee_imageClound_command.html)上传命令`"/Applications/Picsee.app/Contents/MacOS/Picsee -u %s"`
 - 自定义需要上传的附件格式
-- 上传后是否要删除原附件
-- 从 Obsidian 程序外粘贴与拖拽，自动上传
+- 支持标准 Markdown 图片和 Wiki 嵌入，排除代码、注释和原始 HTML 区域
+- 可选上传后删除原附件，默认关闭；遵循 Obsidian 回收站设置，有引用或检查不确定时保留
+- 从 Obsidian 程序外粘贴或拖入文件时自动上传，上传失败则回退为本地附件
+- 本地回退也失败，或云端上传成功但链接未能插入时，通知会显示恢复位置或 URL
+- 「自动上传」开关仅控制现有本地附件修改时触发的上传
 
 ## 插件安装
 
@@ -19,23 +26,22 @@
 
 ## 使用配置
 
-1.  安装图床工具（带shell上传命令）或自定义制作shell上传命令
-2.  Obsidian attachment uploader插件配置
-    - 上传命令：配置上传附件的 shell 命令
-    - 需要上传的附件格式：配置需要上传的附件格式,以回车分隔
-    - 上传后是否要删除原附件：配置上传后是否要删除原附件
-3.  自定义命令示例
-    - uPic在shell中的执行命令为`/Applications/uPic.app/Contents/MacOS/uPic -o url -u /local.png`
-    - shell中输出为
-      ```
-      Uploading ...
-      Uploading 1/1
-      Output URL:
-      https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/Snipaste_2024-08-18_22-14-14.png?x-oss-process=image/auto-orient,1/quality,q_80/format,webp
-      ```
-    - 此插件用%s代替图片本地地址，通过`urlMatch = stdout.match(/\s+(https?:\/\/\S+)/)`来提取命令执行后shell中输出的图片url
-    - 因此使用uPic命令为`/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
-    - 如果自己写脚本来上传图片,请在shell输出中打印上传后的图片网络地址
+1. 安装带命令行接口的图床工具，或准备自定义上传程序
+2. Obsidian attachment uploader 插件配置
+   - **上传命令**：必须包含且仅包含一个独立的 `%s` 参数，用于传入附件本地路径。不支持直接使用 Shell 管道或变量展开；如有需要，可调用可信的可执行包装脚本。内置 uPic 和 Picsee 命令无需脚本。
+   - **需要上传的附件格式**：配置需要上传的附件格式，以逗号或换行分隔
+   - **上传后是否要删除原附件**：可选在附件链接成功替换后删除原附件
+   - **自动上传**：现有本地附件修改时自动上传；粘贴和拖入上传独立于此开关
+3. 自定义命令示例
+   - uPic 命令：`/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s`
+   - stdout 须输出唯一的 HTTP(S) 目标 URL，可带 `Output URL:` 标签，多个不同结果会被拒绝。
+   - 输出示例：
+     ```text
+     Uploading ...
+     Uploading 1/1
+     Output URL:
+     https://example.com/image.png
+     ```
 
 ## 插件使用
 

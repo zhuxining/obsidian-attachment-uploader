@@ -3,9 +3,28 @@
  * 兼容 URL 中含空格/括号的情况：取到行尾再裁掉包裹的引号。
  */
 export function extractUrl(stdout: string): string | null {
-  const match = stdout.match(/https?:\/\/[^\n]*/);
-  if (!match) return null;
-  return match[0].trim().replace(/^["']|["']$/g, "");
+  const lines = stdout.split(/\r?\n/).map((line) => line.trim());
+  const labelled = new Set<string>();
+  const standalone = new Set<string>();
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    const prefix = /^(?:Output URL|Uploaded|result|URL):\s*(https?:\/\/.*)$/i.exec(line);
+    const nextLine = /^(?:Output URL|Uploaded|result|URL):?$/i.test(line);
+    let candidate = (prefix?.[1] ?? (nextLine ? lines[i + 1] : line) ?? "").trim();
+    candidate = candidate.replace(/^["']|["']$/g, "");
+    if (!/^https?:\/\//i.test(candidate)) continue;
+    try {
+      const result = new URL(candidate);
+      if (["http:", "https:"].includes(result.protocol) && result.hostname) {
+        (prefix || nextLine ? labelled : standalone).add(candidate);
+        if (nextLine) i += 1;
+      }
+    } catch {
+      /* invalid URL, try the next line */
+    }
+  }
+  const candidates = labelled.size > 0 ? labelled : standalone;
+  return candidates.size === 1 ? [...candidates][0]! : null;
 }
 
 /**
@@ -18,22 +37,13 @@ export function extractUrl(stdout: string): string | null {
  * 括号在 Markdown 裸链接里会提前截断，因此含括号时用尖括号 <...> 包裹。
  */
 export function toMarkdownUrl(url: string): string {
-  let raw = url;
-  // 只解码到不再出现 %25 为止，保留合法的 %XX 单次编码（如 %23、%3F）
-  while (raw.includes("%25")) {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(raw);
-    } catch {
-      // 含非法 % 序列（如 100%off），停止解码，保留当前结果
-      break;
-    }
-    if (decoded === raw) break; // 无可解码内容
-    raw = decoded;
+  let value = url.trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = value.replace(/%25(?=[0-9a-f]{2})/gi, "%");
+    if (next === value) break;
+    value = next;
   }
-  // 完全未编码（无 %）时补一次 encodeURI 归一化；已含 %XX 则跳过，避免二次编码
-  if (!raw.includes("%")) {
-    raw = encodeURI(raw);
-  }
-  return /[()]/.test(raw) ? `<${raw}>` : raw;
+  // Preserve existing %XX sequences when encoding remaining Unicode/whitespace.
+  value = encodeURI(value).replace(/%25([0-9a-f]{2})/gi, "%$1");
+  return /[()]/.test(value) ? `<${value}>` : value;
 }

@@ -4,12 +4,15 @@ This file provides guidance to AGENTS Code when working with code in this reposi
 
 ## Overview
 
-Obsidian **desktop-only** plugin (`isDesktopOnly: true` in `manifest.json`, because it shells out via `child_process.exec`). It uploads local note attachments to cloud storage through a user-configured shell command, then rewrites the note's local links to the returned network URLs. Three trigger paths: manual command/ribbon button, paste/drag handlers, and auto-upload on vault file modify (when `autoUploadOnSave` is on).
+Obsidian **desktop-only** plugin (`isDesktopOnly: true` in `manifest.json`, because it runs local executables via `child_process.execFile` with `shell:false`). It uploads local note attachments to cloud storage through a user-configured executable command, then rewrites the note's local links to the returned network URLs. Three trigger paths: manual command/ribbon button, paste/drag handlers, and auto-upload on vault file modify (when `autoUploadOnSave` is on).
 
 ## Conventions & gotchas
 
 - **i18n**: `src/lang/helpers.ts` exposes `t(key)`. Every user-facing string must be added to **both** `lang/locale/en.ts` and `lang/locale/zh-cn.ts`, using English keys as the canonical names.
-- **Upload command contract**: the command is run with `child_process.exec`; the literal `%s` token is replaced by the double-quoted, escaped file path. A custom command **must print the resulting URL to stdout** (typically the only content on its line). `UploadService.extractUrl` captures from `http(s)://` to end-of-line and trims surrounding quotes (so a URL may contain spaces/parentheses); `toMarkdownUrl` wraps the URL in `<...>` whenever it contains space/paren/angle-bracket characters so bare `![]()` links don't break. This contract is surfaced in the README and settings description.
+- **Upload command contract**: `command.ts` parses executable/arguments and uses `child_process.execFile` with `shell:false`, a timeout and bounded output. Exactly one standalone `%s` argument is replaced by the file path; shell expansion and pipelines require a trusted executable wrapper. A custom command **must print one destination URL to stdout**. `extractUrl` in `src/services/url.ts` prefers valid HTTP(S) results labelled `Output URL`, `Uploaded`, `result` or `URL` (case-insensitive, inline after a colon or on the following line); otherwise it uses standalone URL lines. The selected priority must have exactly one distinct candidate; identical repeats are allowed, different results fail, and incidental prose URLs are ignored. Surrounding quotes are trimmed. `toMarkdownUrl` normalizes percent encoding/Unicode/whitespace and wraps URLs containing parentheses in `<...>` so Markdown links do not break.
+- **Attachment parsing**: `attachmentMatcher.ts` uses `mdast-util-from-markdown` for standard inline and reference images, then merges Wiki embeds by UTF-16 offsets. Keep code, comments, raw HTML, image ranges and definitions excluded from Wiki scanning. This supports standard image syntax plus Wiki embeds, not every Obsidian extension or ordinary non-image link; metadata resolution remains authoritative.
+- **Conservative deletion budgets**: `uploadService.ts` scans at most 128 disk Markdown/Canvas files, 4 Mi UTF-16 code units total and 100 ms elapsed time, yielding every 16 files. Texts above 256 Ki code units retain the source before normalization; open-view checks separately use 4 Mi/100 ms budgets. Exhausted budgets or uncertain/read/parse failures retain the file. Reads are repeated per operation; elapsed-time checks cannot preempt reads or synchronous work, and scan/trash remains non-atomic.
+- **Unapplied cloud results**: Manual, automatic and paste/drop flows call `preserveUploadReceipt` when a successful upload cannot be applied. It writes `~/.obsidian-attachment-uploader-recovery/upload-*/receipt.json` with `URL`, `sourcePath`, `filename`, `timestamp`, enforcing root/directory mode `0700` and file mode `0600`. Persistent notices report the path and URL, or URL/error if saving fails. Recovery is manual; do not describe receipts as attachment backups or remote-object deletion.
 - `uploadFileFormat` is a `Set` in memory, serialized to/from a comma-joined string only in `main.ts`'s `loadSettings`/`saveSettings`.
 - Images vs. non-images are split by extension regex (`avif|bmp|gif|jpeg|jpg|png|svg|webp`); images produce `![]()` links, others `[]()` links.
 - `UploadService` methods accept narrow duck-typed `app`/`editor` shapes (not the full Obsidian types) in several places — keep that pattern when extending.
@@ -20,8 +23,8 @@ Obsidian **desktop-only** plugin (`isDesktopOnly: true` in `manifest.json`, beca
 Uses `bun` (lockfile `bun.lock`); `npm` works identically. Scripts in `package.json`:
 
 ```bash
-npm run dev       # node esbuild.config.mjs  (watch mode, rebuilds main.js on change)
-npm run build     # tsc -noEmit -skipLibCheck && node --no-warnings esbuild.config.mjs production
+npm run dev       # vp build --watch --mode development (rebuilds root main.js)
+npm run build     # tsc --noEmit && vp build (Rolldown, dist/main.js copied to root)
 npm run version   # node version-bump.mjs + git add  (bump manifest.json/versions.json)
 npm test          # vp test run
 npm check         # vp check --fix

@@ -52,8 +52,9 @@ jobs:
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          tag="${{ github.event.inputs.tag }}"
+          tag="$INPUT_TAG"
           if [ -z "$tag" ]; then
             tag="${GITHUB_REF#refs/tags/}"
           fi

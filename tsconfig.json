@@ -1,25 +1,18 @@
 {
   "compilerOptions": {
-    "inlineSourceMap": true,
-    "inlineSources": true,
     "module": "ESNext",
     "target": "ESNext",
-    "importHelpers": true,
     "isolatedModules": true,
-    "strictNullChecks": true,
     "types": ["node"],
     "lib": ["DOM", "ESNext"],
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "useDefineForClassFields": true,
-    "noImplicitAny": true,
     "erasableSyntaxOnly": true,
     "moduleDetection": "force",
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "allowJs": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
     /* Linting */
@@ -30,5 +23,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vite.config.ts"]
 }

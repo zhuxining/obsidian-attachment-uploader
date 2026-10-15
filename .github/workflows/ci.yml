@@ -1,0 +1,26 @@
+name: Validate Obsidian plugin
+
+on:
+  push:
+    branches:
+      - fix/harden-upload-and-attachment-safety
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: "26"
+          cache: true
+      - name: Install dependencies
+        run: vp install
+      - name: Typecheck and build
+        run: vp run ci
+      - name: Unit tests
+        run: vp test run

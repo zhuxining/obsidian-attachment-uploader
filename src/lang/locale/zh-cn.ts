@@ -1,4 +1,7 @@
 export default {
+  "Attachment recovery copy saved:": "附件恢复副本已保存：",
+  "Attachment recovery failed; temporary copy retained:": "附件恢复失败；已保留临时副本：",
+  Unavailable: "不可用",
   "Upload attachments": "上传附件",
   "No local attachment matching the upload conditions was found.": "未找到符合上传条件的本地附件",
   "attachments that matched the upload conditions \n Start uploading and replacing...":
@@ -12,7 +15,7 @@ export default {
   "Upload service": "上传服务",
   "Executed command": "执行命令",
   "The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md":
-    "命令通过 child_process 的 exec 方法执行，%s 会被替换为文件本地路径（请保留）。执行后插件会从输出提取上传后的网络地址——例如运行「/custom-script /one.png」应输出「https://domain/one.png」，插件用正则提取该地址。正则匹配语法详见 README_ZH.md",
+    "通过无 Shell 的方式执行上传命令，%s 必须是单独参数且只出现一次。上传程序必须向标准输出打印 URL。",
   "Test file path": "测试文件路径",
   "Upload test": "上传测试",
   "Enter the test file path": "请输入用于上传测试的文件路径",
@@ -23,8 +26,11 @@ export default {
   "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
     "符合配置格式的文件，会在执行命令时被上传并用网络地址替换原地址，格式以英文逗号分隔",
   "Delete local files after successful upload": "上传成功后删除本地文件",
+  "Upload succeeded but was not applied. Recovery receipt:": "上传成功但未应用。恢复回执：",
+  "Upload succeeded but recovery receipt could not be saved. URL:":
+    "上传成功，但无法保存恢复回执。URL：",
   "Auto uploaded:": "自动上传：",
   "Auto upload": "自动上传",
   "When enabled, files will be automatically uploaded and replaced when pasting or dragging":
-    "开启后，粘贴、拖拽时会自动上传并替换文件",
+    "开启后，已打开笔记引用的本地附件修改时会尝试自动上传",
 };
