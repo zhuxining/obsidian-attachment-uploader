@@ -4,17 +4,17 @@ Audit baseline: `c3fffe02b299e5d1c001543be721086eb1631556` (2026-10-14). All app
 
 ## Confirmed defects addressed in this PR
 
-| Priority | Area | Evidence | Remediation |
-| --- | --- | --- | --- |
-| High | Command execution | `exec(uploadCommand.replace("%s", escapedPath))` interprets shell expansions in quoted filenames | Parse executable/arguments and invoke `execFile` with `shell:false`, explicit timeout, bounded output |
-| High | Attachment deletion | Successful upload alone triggered `vault.delete` even when link updates were incomplete | Require successful editor rewrite, conservative cross-Vault reference check, use trash instead of permanent delete |
-| Medium | Clipboard/drop | `preventDefault` occurs before upload, no failure recovery | Reserve a stable marker and fall back to a locally saved Vault attachment |
-| Medium | Temporary files | Original filename written directly into global tmp directory without cleanup | Per-upload `mkdtemp`, exclusive write, cleanup in `finally` |
-| Medium | Ambiguous filenames | First filename match across the Vault may refer to the wrong folder | Resolve with `metadataCache`, refuse ambiguous matches |
-| Medium | Auto upload | Vault `modify` could upload a file merely mentioned by name, and regex might rewrite wrong links | Require resolved embed identity; avoid rewriting ambiguous bare basenames |
-| Medium | Release action | Manual tag field interpolated into Shell script | Pass user input through an environment variable |
-| Low | Settings | Cached upload service ignored changes until reload | Build lightweight upload service from current settings |
-| Low | URL output | First incidental HTTP URL could be treated as uploaded destination | Prefer standalone URLs or explicit uploader output labels; normalize percent encoding |
+| Priority | Area                | Evidence                                                                                         | Remediation                                                                                                        |
+| -------- | ------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| High     | Command execution   | `exec(uploadCommand.replace("%s", escapedPath))` interprets shell expansions in quoted filenames | Parse executable/arguments and invoke `execFile` with `shell:false`, explicit timeout, bounded output              |
+| High     | Attachment deletion | Successful upload alone triggered `vault.delete` even when link updates were incomplete          | Require successful editor rewrite, conservative cross-Vault reference check, use trash instead of permanent delete |
+| Medium   | Clipboard/drop      | `preventDefault` occurs before upload, no failure recovery                                       | Reserve a stable marker and fall back to a locally saved Vault attachment                                          |
+| Medium   | Temporary files     | Original filename written directly into global tmp directory without cleanup                     | Per-upload `mkdtemp`, exclusive write, cleanup in `finally`                                                        |
+| Medium   | Ambiguous filenames | First filename match across the Vault may refer to the wrong folder                              | Resolve with `metadataCache`, refuse ambiguous matches                                                             |
+| Medium   | Auto upload         | Vault `modify` could upload a file merely mentioned by name, and regex might rewrite wrong links | Require resolved embed identity; avoid rewriting ambiguous bare basenames                                          |
+| Medium   | Release action      | Manual tag field interpolated into Shell script                                                  | Pass user input through an environment variable                                                                    |
+| Low      | Settings            | Cached upload service ignored changes until reload                                               | Build lightweight upload service from current settings                                                             |
+| Low      | URL output          | First incidental HTTP URL could be treated as uploaded destination                               | Prefer standalone URLs or explicit uploader output labels; normalize percent encoding                              |
 
 ## Modules and configuration reviewed
 
@@ -22,7 +22,7 @@ Audit baseline: `c3fffe02b299e5d1c001543be721086eb1631556` (2026-10-14). All app
 - `src/attachmentMatcher.ts` — Markdown/Wiki parsing and Vault reference resolution
 - `src/services/UploadService.ts`, `command.ts`, `url.ts` — argument safety, upload result handling and URL/link rewriting
 - `src/settingsTab.ts` and `src/lang/**` — configuration, help strings and defaults
-- `.github/workflows/main.yml`, `esbuild.config.mjs`, `vite.config.ts`, `version-bump.mjs`, `package.json`, `bun.lock` — build and release surfaces
+- `.github/workflows/main.yml`, `vite.config.ts`, `version-bump.mjs`, `package.json`, `bun.lock` — build and release surfaces; Vite Plus / Rolldown builds a single CommonJS artifact in `dist/` and copies `main.js` to the root after each successful build, including watch rebuilds
 - `tests/**` — unit and regression coverage
 
 ## Validation
@@ -30,6 +30,12 @@ Audit baseline: `c3fffe02b299e5d1c001543be721086eb1631556` (2026-10-14). All app
 The fork's GitHub Actions workflow installs dependencies and executes `vp run ci` and `vp test run`. See live checks in the PR; do not equate green CI with macOS/uPic/OSS end-to-end validation.
 
 ## Outstanding limitations
+
+The compatibility baseline is Obsidian Desktop 1.14.4. Editor replacements use `Editor.transaction`; local source removal uses `FileManager.trashFile` to respect trash preferences. Already-handled paste/drop events and deferred views are skipped. Paste/drop results locate the original marker in the editor or source note, using `Vault.process` when the source note no longer has a loaded editor. Manual upload stops editing a view if its source file changes during upload.
+
+Paste/drop batches reserve all insertion markers before starting uploads. A batch containing unsupported formats is left entirely to Obsidian's default handling. Manual uploads group references by resolved file path, and service instances share in-flight command results. Fenced code, backtick code spans and HTML comments are excluded from attachment matching; replacement uses matched offsets rather than global string substitution. Metadata-backed resolution does not enumerate Vault files.
+
+Link replacement uses the same attachment matcher for manual and automatic uploads. When metadata resolution is available, its result for the source note is authoritative: an unresolved link is preserved rather than redirected by a basename fallback. Automatic replacement re-resolves current editor content after upload and changes only embeds targeting the uploaded file. Paste/drop failure recovery retains the initiating note path throughout the asynchronous operation.
 
 1. Regex-based Markdown recognition is not a complete parser. Nested links, escaped unusual paths, encoded variants and non-embed links can remain unmatched; failure should preserve local data.
 2. The full-Vault reference scan is conservative and may retain orphaned local attachments. Vaults with many notes may experience overhead when source deletion is enabled.

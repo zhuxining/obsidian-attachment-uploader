@@ -1,3 +1,7 @@
+# Compatibility
+
+Requires Obsidian Desktop **1.14.4 or later**. Upload commands run as local executables, so mobile devices are not supported.
+
 # obsidian-attachment-uploader
 
 This Obsidian plugin helps you upload local attachments to cloud storage. You can customize the upload shell command and specify which attachment formats to upload.

@@ -20,8 +20,8 @@ Obsidian **desktop-only** plugin (`isDesktopOnly: true` in `manifest.json`, beca
 Uses `bun` (lockfile `bun.lock`); `npm` works identically. Scripts in `package.json`:
 
 ```bash
-npm run dev       # node esbuild.config.mjs  (watch mode, rebuilds main.js on change)
-npm run build     # tsc -noEmit -skipLibCheck && node --no-warnings esbuild.config.mjs production
+npm run dev       # vp build --watch --mode development (rebuilds root main.js)
+npm run build     # tsc --noEmit && vp build (Rolldown, dist/main.js copied to root)
 npm run version   # node version-bump.mjs + git add  (bump manifest.json/versions.json)
 npm test          # vp test run
 npm check         # vp check --fix

@@ -1,3 +1,7 @@
+# 兼容性
+
+需要 Obsidian 桌面版 **1.14.4 或更高版本**。上传依赖本地可执行程序，不支持移动端。
+
 # obsidian-attachment-uploader
 
 这个 Obsidian 插件可以帮助你上传本地附件到云存储,上传shell命令可以自定义,要上传附件的格式可自定义。
