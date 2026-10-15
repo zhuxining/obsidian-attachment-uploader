@@ -14,7 +14,9 @@ export function extractUrl(stdout: string): string | null {
     try {
       const result = new URL(candidate);
       if (["http:", "https:"].includes(result.protocol) && result.hostname) return candidate;
-    } catch { /* invalid URL, try the next line */ }
+    } catch {
+      /* invalid URL, try the next line */
+    }
   }
   return null;
 }

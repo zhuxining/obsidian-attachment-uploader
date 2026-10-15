@@ -102,7 +102,8 @@ describe("toMarkdownUrl", () => {
   });
 
   test("含括号的二次编码 URL：解码后保留括号并用尖括号包裹", () => {
-    const doubleEncoded = "https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%25E6%2588%25AA%25E5%259B%25BE(1).png";
+    const doubleEncoded =
+      "https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%25E6%2588%25AA%25E5%259B%25BE(1).png";
     expect(toMarkdownUrl(doubleEncoded)).toBe(
       "<https://r-w.oss-cn-shanghai.aliyuncs.com/uPic/%E6%88%AA%E5%9B%BE(1).png>",
     );

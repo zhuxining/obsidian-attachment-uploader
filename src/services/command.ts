@@ -19,7 +19,10 @@ export function splitCommand(command: string): string[] {
         word += next;
         index += 1;
         started = true;
-      } else { word += char; started = true; }
+      } else {
+        word += char;
+        started = true;
+      }
       continue;
     }
     if (char === "'" || char === '"') {
@@ -31,7 +34,8 @@ export function splitCommand(command: string): string[] {
     }
     if (/\s/.test(char) && quote === null) {
       if (started) words.push(word);
-      word = ""; started = false;
+      word = "";
+      started = false;
       continue;
     }
     word += char;
@@ -42,16 +46,21 @@ export function splitCommand(command: string): string[] {
   return words;
 }
 
-export function prepareUploadCommand(command: string, filePath: string): { executable: string; args: string[] } {
+export function prepareUploadCommand(
+  command: string,
+  filePath: string,
+): { executable: string; args: string[] } {
   const [executable, ...argumentsTemplate] = splitCommand(command);
   if (!executable) throw new Error("Upload command is empty");
   if (executable.includes("%s")) throw new Error("Executable must not contain %s");
-  if (argumentsTemplate.filter((value) => value === "%s").length !== 1 ||
-    argumentsTemplate.some((value) => value !== "%s" && value.includes("%s"))) {
+  if (
+    argumentsTemplate.filter((value) => value === "%s").length !== 1 ||
+    argumentsTemplate.some((value) => value !== "%s" && value.includes("%s"))
+  ) {
     throw new Error("Upload command must contain exactly one standalone %s argument");
   }
   if (!filePath || filePath.includes("\0")) throw new Error("Invalid attachment path");
-  return { executable, args: argumentsTemplate.map((arg) => arg === "%s" ? filePath : arg) };
+  return { executable, args: argumentsTemplate.map((arg) => (arg === "%s" ? filePath : arg)) };
 }
 
 export async function executeUploadCommand(command: string, path: string): Promise<string> {
