@@ -190,6 +190,34 @@ describe("conservative source deletion", () => {
   });
 
   test.each([
+    String.raw`![](assets/a\.png)`,
+    String.raw`[download](assets/a\.png)`,
+    "![attachment][image]\n\n[image]: assets/a\\.png",
+    String.raw`![](assets\/a\.png)`,
+    "![](assets%2Fa%5C.png)",
+  ])("preserves escaped disk references: %s", async (content) => {
+    const context = deletionFixture();
+    context.cachedRead.mockResolvedValue(content);
+    await context.process();
+    expect(context.trashFile).not.toHaveBeenCalled();
+    expect(context.root.editor.getValue()).toContain("https://cdn.example/a.png");
+  });
+
+  test.each([
+    String.raw`![](assets/a\.png)`,
+    String.raw`[download](assets/a\.png)`,
+    "![attachment][image]\n\n[image]: assets/a\\.png",
+    String.raw`![](assets\/a\.png)`,
+    "![](assets%2Fa%5C.png)",
+  ])("preserves escaped references in another open view: %s", async (content) => {
+    const context = deletionFixture();
+    context.leaves.push({ view: { file: context.note, editor: editor(content) } });
+    await context.process();
+    expect(context.trashFile).not.toHaveBeenCalled();
+    expect(context.root.editor.getValue()).toContain("https://cdn.example/a.png");
+  });
+
+  test.each([
     "![](assets/a.png)",
     "![](assets%2F%61%2Epng)",
     "![](assets%252F%2561%252Epng)",
@@ -387,4 +415,15 @@ describe("upload and editor replacement", () => {
     ).toBe(0);
     expect(root.editor.getValue()).toBe("![](missing/a.png)");
   });
+});
+
+test("reports successful command results for prefix suggestions", async () => {
+  vi.mocked(executeUploadCommand).mockResolvedValueOnce("Output URL: https://cdn.example/a.png");
+  const onSuccess = vi.fn<(url: string) => void>();
+  const service = new UploadService("uploader %s", false, new Set(), new Map(), onSuccess);
+  await expect(service.uploadServe("/vault/a.png")).resolves.toEqual({
+    success: true,
+    url: "https://cdn.example/a.png",
+  });
+  expect(onSuccess).toHaveBeenCalledExactlyOnceWith("https://cdn.example/a.png");
 });

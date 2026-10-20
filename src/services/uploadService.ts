@@ -18,6 +18,7 @@ const REMOTE_LINK_REGEX =
 const REMOTE_URL_REGEX = /https?:\/\/[^\s<>)]+/gi;
 const PERCENT_BYTES_REGEX = /(?:%[\da-f]{2})+/gi;
 const HTML_ENTITY_REGEX = /&(?:#\d+|#x[\da-f]+|[a-z][\da-z]*);/i;
+const MARKDOWN_ESCAPE_REGEX = /\\([!-/:-@[-`{-~])/g;
 
 /** Unknown encodings are evidence to preserve the source, not proof of absence. */
 function mayReferenceFile(content: string, file: TFile): boolean {
@@ -37,8 +38,11 @@ function mayReferenceFile(content: string, file: TFile): boolean {
         });
       }
     });
-    if (decoded === text) break;
-    text = decoded;
+    // Markdown permits backslash escapes for ASCII punctuation in destinations.
+    // Normalize after percent decoding too, so encoded escapes cannot hide a reference.
+    const unescaped = decoded.replace(MARKDOWN_ESCAPE_REGEX, "$1");
+    if (unescaped === text) break;
+    text = unescaped;
   }
   return (
     text.includes(file.name) ||
@@ -72,17 +76,20 @@ export class UploadService {
   private isDeleteSourceFile: boolean;
   private uploadFileFormat: Set<string>;
   private readonly tasks: UploadTasks;
+  private readonly onUploadSuccess?: (url: string) => void;
 
   constructor(
     uploadCommand: string,
     isDeleteSourceFile: boolean,
     uploadFileFormat: Set<string>,
     tasks: UploadTasks = new Map(),
+    onUploadSuccess?: (url: string) => void,
   ) {
     this.uploadCommand = uploadCommand;
     this.isDeleteSourceFile = isDeleteSourceFile;
     this.uploadFileFormat = uploadFileFormat;
     this.tasks = tasks;
+    this.onUploadSuccess = onUploadSuccess;
   }
 
   /**
@@ -131,9 +138,13 @@ export class UploadService {
     try {
       const stdout = await executeUploadCommand(this.uploadCommand, path);
       const url = extractUrl(stdout);
-      return url
-        ? { success: true, url }
-        : { success: false, errorMessage: "No valid upload URL was returned" };
+      if (!url) return { success: false, errorMessage: "No valid upload URL was returned" };
+      try {
+        this.onUploadSuccess?.(url);
+      } catch {
+        // A notification hook must never turn a successful upload into a failure.
+      }
+      return { success: true, url };
     } catch (err) {
       return { success: false, errorMessage: (err as Error).message };
     }
