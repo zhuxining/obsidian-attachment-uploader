@@ -16,13 +16,11 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 - Customizable attachment formats to upload
 - Supports standard Markdown images and Wiki embeds, excluding code, comments and raw HTML
 - Optional source deletion after upload, disabled by default; respects Obsidian's trash preference and retains files when references remain or checks are uncertain
-- Automatically uploads files pasted or dragged from outside Obsidian, falling back to local attachments if upload fails
+- Automatic uploads are on by default for pasted screenshots and pasted/dropped files; failures fall back to local attachments
 - If local fallback also fails or a cloud upload succeeds but its link cannot be inserted, a notice shows the recovery location or URL
-- The auto-upload setting only controls uploads triggered by modifications to existing local attachments
-- Transfers remote HTTP(S) images referenced by Markdown into the configured host: whole note, selection or one image from the editor context menu
-- Optional Markdown paste policy (`off`, `ask`, `auto`) for text containing remote images; the pasted text is inserted unchanged
-- Skips links that already use the configured image host, and can force a single-image re-upload on demand
-- On macOS, reads only the current default uPic host's public URL prefix; Picsee/custom commands can use manual prefixes or a suggested prefix from an earlier successful upload
+- Optional inclusion of remote HTTP(S) images in pasted Markdown, disabled by default
+- Manually transfers remote HTTP(S) images in the current note
+- Skips uploaded results remembered during this session and optional configured URL prefixes
 
 ## Installation
 
@@ -38,11 +36,9 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 - **Upload Command**: Include exactly one standalone `%s` argument for the local attachment path. Direct shell pipelines and variable expansion are unsupported; use a trusted executable wrapper if needed. Built-in uPic and Picsee commands need no script.
 - **Attachment Formats to Upload**: Configure which attachment formats to upload, separated by commas or line breaks
 - **Delete Original After Upload**: Enable optional source deletion after the attachment link is successfully replaced
-- **Auto Upload**: Upload existing local attachments when they are modified; pasting and dragging upload independently of this setting
-- **Remote image paste policy**: `off` keeps Obsidian's original paste behaviour; `ask` inserts the text and offers one action for this paste; `auto` transfers the pasted range immediately
-- **Automatically detect the current image host**: only available for uPic on macOS; reads the default host's public URL prefix without reading or showing configuration secrets
-- **Remote image URL prefixes to skip**: one HTTP(S) prefix per line. Matching requires the same protocol, exact host, effective port and path directory; shared hosts such as `raw.githubusercontent.com` require an account/repository path
-- **Insert suggested prefix**: derives a reviewable prefix from the last successful upload URL; it is not saved until you keep it
+- **Auto upload**: on by default for pasted screenshots and pasted/dropped files. When off, Obsidian inserts them normally
+- **Include remote images**: off by default. When automatic uploading is enabled, also transfer HTTP(S) images in pasted Markdown. Disabling the main switch disables this option while retaining its value
+- **Remote image URL prefixes to skip**: optional, one HTTP(S) prefix per line. Matching requires the same protocol, exact host, port and path directory
 
 3. Custom command examples
 
@@ -56,19 +52,23 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
   https://example.com/image.png
   ```
 
+Settings are grouped into **Upload tool**, **Upload options** and **Skip rules**. The command editor appears only for custom tools. Expand **Test upload** to upload a local file and check the result; the test path is not saved.
+
+Editing existing vault attachments does not trigger uploads. Use the manual command to upload modified attachments. Allowed formats may include PDF, audio and other extensions; remote transfer handles images only.
+
 ## Usage
 
 1. Open a note containing attachments in Obsidian
-2. Press `command+p` to open the command palette and type `Upload editor attachments`, or use the Ribbon button
-3. To transfer remote images, use `Transfer remote images in current note`, `Transfer remote images in selection`, or right-click an image in the editor for `Transfer this image` / `Force re-upload this image`
-4. Pasting Markdown text follows the remote image paste policy. In `ask` mode, the text is inserted immediately and a notice offers to transfer only that pasted range
+2. Run `Upload attachments in current note` from the command palette, or click the upload Ribbon button
+   This command uploads local attachments and transfers remote HTTP(S) images in the current note. Remote images are processed first so newly uploaded local attachments are not transferred again.
+3. Enable both **Auto upload** and **Include remote images** to transfer pasted Markdown images automatically. Rich clipboard content keeps Obsidian’s original paste behaviour
 
-Remote image transfer limits can be changed in the plugin settings under **Remote images**. Defaults: at most 100 unique URLs per operation, 3 concurrent downloads, 20 MiB per image, 200 MiB per batch, 30 seconds per download and 3 redirects. Enter positive integers; redirects also accept 0 to disable following redirects. Changes apply to the next operation. Existing installations use these defaults until changed.
+Remote image transfers use fixed limits: 100 unique URLs per operation, 3 concurrent downloads, 20 MiB per image, 200 MiB per batch, 30 seconds per download and 3 redirects.
 
 ## Credits
 
 - Inspired by [typora](https://typora.io/) image upload functionality
 
-Within one batch, identical URLs are downloaded/uploaded once. Different notes transfer independently; remote-transfer upload commands run through one serial queue. Repeated clicks on the same operation reuse the task. Original image references are tracked through editor transactions: deleted/edited references, file switches or uncertain identities stop replacement and successful unapplied URLs receive recovery receipts.
+Manual uploading processes only the current document and works regardless of automatic-upload settings. Local attachments and remote images share one progress notice, cancel button and final summary. Cancellation stops subsequent work; running upload commands may finish, and successful unapplied URLs receive recovery receipts. Repeated clicks reuse the active task for that note.
 
-Changing the plugin's upload service/command or detecting a changed uPic host clears session records and prefix suggestions. Late old jobs cannot repopulate the new records; manual prefixes are retained. After switching hosts inside Picsee or a custom uploader, use **Clear session records** in settings. Cancelling a queued upload prevents its command from starting; an already-running upload may finish.
+Changing the plugin’s upload service or command resets session upload records and retains manual prefixes. Configure URL prefixes to skip existing hosted images after restarting; otherwise, manually transferring a note may upload those images again. Cancelling a queued upload prevents its command from starting; an already-running upload may finish.
