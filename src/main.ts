@@ -28,6 +28,7 @@ import { ImageReferenceTracker } from "./services/imageReferenceTracker";
 import {
   captureRemoteImageReferences,
   ImageTransferService,
+  remoteImageSessionKey,
   type RemoteImageScope,
   type RemoteImageTransferMode,
   type TransferDocumentAccess,
@@ -903,7 +904,16 @@ export default class AttachmentUploader extends Plugin {
       );
     }
 
-    const downloader = new RemoteImageDownloader();
+    const limits = {
+      maxUniqueUrls: this.settings.remoteImageMaxUniqueUrls,
+      downloadConcurrency: this.settings.remoteImageDownloadConcurrency,
+      maxImageBytes: this.settings.remoteImageMaxImageMiB * 1024 * 1024,
+      batchBytes: this.settings.remoteImageBatchMiB * 1024 * 1024,
+      downloadTimeoutMs: this.settings.remoteImageDownloadTimeoutSeconds * 1000,
+    };
+    const downloader = new RemoteImageDownloader({
+      maxRedirects: this.settings.remoteImageMaxRedirects,
+    });
     const notice = new Notice(t("Transferring remote images..."), 0);
     const progressEl = notice.noticeEl.createEl("span");
     const cancelButton = notice.noticeEl.createEl("button", { text: t("Cancel") });
@@ -946,13 +956,14 @@ export default class AttachmentUploader extends Plugin {
         scope,
         mode,
         settings: {
+          ...limits,
           uploadFileFormat: target.formats,
           prefixes,
         },
         signal: controller.signal,
         onProgress,
       });
-      this.showRemoteTransferSummary(summary);
+      this.showRemoteTransferSummary(summary, limits.maxUniqueUrls);
       return summary;
     } finally {
       notice.hide();
@@ -1025,10 +1036,10 @@ export default class AttachmentUploader extends Plugin {
     return null;
   }
 
-  private showRemoteTransferSummary(summary: TransferSummary): void {
+  private showRemoteTransferSummary(summary: TransferSummary, maxUniqueUrls: number): void {
     if (summary.limitExceeded) {
       new Notice(
-        `${t("Too many remote images to transfer in one operation.")} ${t("Narrow the scope to at most 100 unique images.")}`,
+        `${t("Too many remote images to transfer in one operation.")} ${t("Maximum unique image URLs per operation")}: ${maxUniqueUrls}`,
         7000,
       );
       return;
@@ -1062,11 +1073,9 @@ export default class AttachmentUploader extends Plugin {
     const text = clipboard.getData("text/plain");
     if (!text) return;
     const fragment = collectRemoteImageReferences(text);
-    // A fragment parsed as plain text can still resolve against a definition
-    // that already exists in the note. A fragment containing resolved images
-    // is left to the normal path unless one of those images is remote.
-    const potentialExternalReference =
-      fragment.imageCount === 0 && hasPotentialImageReferenceSyntax(text);
+    // Reference images can resolve against definitions already in the note,
+    // including fragments that also contain local images.
+    const potentialExternalReference = hasPotentialImageReferenceSyntax(text);
     if (
       !fragment.references.length &&
       !fragment.hasUnresolvedReferences &&
@@ -1085,20 +1094,22 @@ export default class AttachmentUploader extends Plugin {
       this.settings.remoteImageAutoDetectHost && this.settings.uploadService === "uPic"
         ? new Set<string>()
         : this.remoteOutputUrls;
-    const transferableFragment = fragment.references.some(
+    const start = editor.posToOffset(editor.getCursor("from"));
+    const selectionEnd = editor.posToOffset(editor.getCursor("to"));
+    const before = editor.getValue();
+    const prospective = before.slice(0, start) + text + before.slice(selectionEnd);
+    const transferableFragment = collectRemoteImageReferences(prospective).references.some(
       (reference) =>
-        !sessionOutputs.has(reference.url) && !isOwnRemoteImageUrl(reference.url, manualPrefixes),
+        reference.start >= start &&
+        reference.end <= start + text.length &&
+        !sessionOutputs.has(remoteImageSessionKey(reference.url)) &&
+        !isOwnRemoteImageUrl(reference.url, manualPrefixes),
     );
-    // An unresolved reference can point at a remote definition already in the
-    // note, so it must be inspected after insertion.
-    if (!transferableFragment && !fragment.hasUnresolvedReferences && !potentialExternalReference) {
-      return;
-    }
+    if (!transferableFragment) return;
 
     evt.preventDefault();
-    const start = editor.posToOffset(editor.getCursor("from"));
-    const selectedLength = editor.posToOffset(editor.getCursor("to")) - start;
-    const beforeLength = editor.getValue().length;
+    const selectedLength = selectionEnd - start;
+    const beforeLength = before.length;
     editor.replaceSelection(text);
     const updated = editor.getValue();
     const insertedText = updated.slice(
@@ -1113,7 +1124,11 @@ export default class AttachmentUploader extends Plugin {
     const transferable = new Set(
       insertedReferences
         .map((reference) => reference.url)
-        .filter((url) => !sessionOutputs.has(url) && !isOwnRemoteImageUrl(url, manualPrefixes)),
+        .filter(
+          (url) =>
+            !sessionOutputs.has(remoteImageSessionKey(url)) &&
+            !isOwnRemoteImageUrl(url, manualPrefixes),
+        ),
     );
     if (!transferable.size) return;
 
@@ -1147,7 +1162,11 @@ export default class AttachmentUploader extends Plugin {
     const transferable = new Set(
       references
         .map((reference) => reference.url)
-        .filter((url) => !this.remoteOutputUrls.has(url) && !isOwnRemoteImageUrl(url, prefixes)),
+        .filter(
+          (url) =>
+            !this.remoteOutputUrls.has(remoteImageSessionKey(url)) &&
+            !isOwnRemoteImageUrl(url, prefixes),
+        ),
     );
     if (!transferable.size) {
       this.releaseReferenceScope(scope);

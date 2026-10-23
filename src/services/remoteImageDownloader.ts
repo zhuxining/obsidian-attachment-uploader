@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import { createWriteStream } from "node:fs";
 import { mkdtemp, rename, rm, unlink } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { isIP, type LookupFunction } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Transform } from "node:stream";
@@ -13,7 +11,6 @@ import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 
 export type RemoteImageDownloadFailureCode =
   | "invalid-url"
-  | "blocked-address"
   | "http-status"
   | "too-large"
   | "batch-limit"
@@ -55,8 +52,6 @@ export interface DownloadedImage {
 }
 
 export interface RemoteImageDownloaderOptions {
-  /** Tests may opt into loopback servers; production keeps this false. */
-  allowPrivateAddresses?: boolean;
   timeoutMs?: number;
   maxBytes?: number;
   maxRedirects?: number;
@@ -80,7 +75,6 @@ const DEFAULT_MAX_REDIRECTS = 3;
 const SNIFF_BYTES = 4096;
 const TEMP_PREFIX = "obsidian-attachment-uploader-remote-";
 const USER_AGENT = "Obsidian-Attachment-Uploader/1.3";
-const LOCAL_HOST_SUFFIXES = [".localhost"];
 
 function tooLarge(): RemoteImageDownloadError {
   return new RemoteImageDownloadError("too-large", "Remote image exceeds the size limit");
@@ -93,72 +87,7 @@ function assertBudget(budget: DownloadBudget | undefined, additional: number): v
   }
 }
 
-function normalizeHostname(hostname: string): string {
-  return hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
-}
-
-function isBlockedIpv4(address: string): boolean {
-  const parts = address.split(".").map(Number);
-  if (
-    parts.length !== 4 ||
-    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
-  ) {
-    return true;
-  }
-  const [a, b] = parts as [number, number, number, number];
-  // Private networks, CGNAT and VPN Fake-IP addresses are valid desktop image sources.
-  if (a === 0 || a === 127) return true;
-  if (a === 169 && b === 254) return true;
-  return a >= 224;
-}
-
-function expandIpv6(address: string): number[] | null {
-  const normalized = normalizeHostname(address);
-  const halves = normalized.split("::");
-  if (halves.length > 2) return null;
-  const left = halves[0] ? halves[0].split(":") : [];
-  const right = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
-  const missing = 8 - left.length - right.length;
-  if ((halves.length === 1 && missing !== 0) || missing < 0) return null;
-  const groups = [...left, ...Array.from({ length: missing }, () => "0"), ...right];
-  const values: number[] = [];
-  for (const group of groups) {
-    if (!/^[0-9a-f]{1,4}$/i.test(group)) return null;
-    values.push(Number.parseInt(group, 16));
-  }
-  return values.length === 8 ? values : null;
-}
-
-function ipv6ToIpv4(groups: number[]): string | null {
-  const prefix = groups.slice(0, 5).every((group) => group === 0);
-  const mapped = groups[5] === 0xffff || groups[5] === 0;
-  if (!prefix || !mapped) return null;
-  const high = groups[6]!;
-  const low = groups[7]!;
-  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
-}
-
-/** Block local control endpoints and non-unicast addresses; allow intranet and VPN sources. */
-export function isBlockedNetworkAddress(address: string): boolean {
-  const normalized = normalizeHostname(address);
-  const family = isIP(normalized);
-  if (family === 4) return isBlockedIpv4(normalized);
-  if (family !== 6) return true;
-
-  const groups = expandIpv6(normalized);
-  if (!groups) return true;
-
-  const ipv4 = ipv6ToIpv4(groups);
-  if (ipv4) return isBlockedIpv4(ipv4);
-
-  const first = groups[0]!;
-  // Unspecified/loopback and IPv4-mapped variants are handled above by ipv6ToIpv4.
-  const linkLocal = (first & 0xffc0) === 0xfe80;
-  const multicast = (first & 0xff00) === 0xff00;
-  return linkLocal || multicast;
-}
-
-function assertAllowedUrl(value: string, allowPrivateAddresses: boolean): URL {
+function assertAllowedUrl(value: string): URL {
   let url: URL;
   try {
     url = new URL(value);
@@ -171,46 +100,7 @@ function assertAllowedUrl(value: string, allowPrivateAddresses: boolean): URL {
   if (url.username || url.password) {
     throw new RemoteImageDownloadError("invalid-url", "URL credentials are not allowed");
   }
-  const hostname = normalizeHostname(url.hostname);
-  if (!hostname) throw new RemoteImageDownloadError("invalid-url", "Missing URL hostname");
-  if (hostname === "localhost" || LOCAL_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) {
-    throw new RemoteImageDownloadError("blocked-address", "Local addresses are not allowed");
-  }
-  if (!allowPrivateAddresses && isIP(hostname) && isBlockedNetworkAddress(hostname)) {
-    throw new RemoteImageDownloadError("blocked-address", "Local or non-unicast addresses are not allowed");
-  }
   return url;
-}
-
-function createLookup(allowPrivateAddresses: boolean): LookupFunction {
-  const lookup = ((
-    hostname: string,
-    options: { all?: boolean; family?: number },
-    callback: (...args: unknown[]) => void,
-  ) => {
-    dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
-      if (error) {
-        callback(error, "", 0);
-        return;
-      }
-      const list = addresses as LookupAddress[];
-      if (!list.length) {
-        callback(new Error("No address resolved"), "", 0);
-        return;
-      }
-      if (!allowPrivateAddresses && list.some((item) => isBlockedNetworkAddress(item.address))) {
-        callback(new RemoteImageDownloadError("blocked-address"), "", 0);
-        return;
-      }
-      const first = list[0]!;
-      if (options.all) {
-        callback(null, list);
-      } else {
-        callback(null, first.address, first.family);
-      }
-    });
-  }) as unknown as LookupFunction;
-  return lookup;
 }
 
 function responseDecoder(response: IncomingMessage): Transform | null {
@@ -296,19 +186,15 @@ export function sniffImageType(buffer: Buffer, _contentType: string): ImageType 
 }
 
 export class RemoteImageDownloader {
-  private readonly allowPrivateAddresses: boolean;
   private readonly timeoutMs: number;
   private readonly maxBytes: number;
   private readonly maxRedirects: number;
-  private readonly lookup: LookupFunction;
   private workDirectoryPromise: Promise<string> | null = null;
 
   constructor(options: RemoteImageDownloaderOptions = {}) {
-    this.allowPrivateAddresses = options.allowPrivateAddresses ?? false;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
     this.maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
-    this.lookup = createLookup(this.allowPrivateAddresses);
   }
 
   private async workDirectory(): Promise<string> {
@@ -337,7 +223,7 @@ export class RemoteImageDownloader {
     const onAbort = () => controller.abort();
     options.signal?.addEventListener("abort", onAbort, { once: true });
     try {
-      return await this.fetchInto(assertAllowedUrl(url, this.allowPrivateAddresses), context);
+      return await this.fetchInto(assertAllowedUrl(url), context);
     } catch (error) {
       if (timedOut)
         throw new RemoteImageDownloadError("timeout", "Remote image download timed out");
@@ -369,7 +255,7 @@ export class RemoteImageDownloader {
       if (!location) {
         throw new RemoteImageDownloadError("http-status", "Redirect without location", status);
       }
-      const next = assertAllowedUrl(new URL(location, url).toString(), this.allowPrivateAddresses);
+      const next = assertAllowedUrl(new URL(location, url).toString());
       return await this.fetchInto(next, context, redirects + 1);
     }
 
@@ -394,7 +280,6 @@ export class RemoteImageDownloader {
           method: "GET",
           agent: false,
           signal: context.signal,
-          lookup: this.lookup,
           headers: {
             "User-Agent": USER_AGENT,
             Accept: "image/*,*/*;q=0.8",

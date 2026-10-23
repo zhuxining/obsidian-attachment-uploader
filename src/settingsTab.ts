@@ -5,6 +5,10 @@ import { uploadCommandDict } from "./services/presets";
 import type { UploadTargetDetection, UploadTargetReason } from "./services/uploadTargetResolver";
 import {
   isRemoteImagePastePolicy,
+  isRemoteImageLimit,
+  remoteImageLimitRange,
+  REMOTE_IMAGE_LIMIT_DEFAULTS,
+  type RemoteImageLimitKey,
   isUploadServiceName,
   parseUploadFormats,
   remoteImageRuleScopeKey,
@@ -38,6 +42,7 @@ export class SettingTab extends PluginSettingTab {
   private detectionReason: UploadTargetReason | null = null;
   private detectionScopeKey: string | null = null;
   private manualPrefixInput: HTMLTextAreaElement | null = null;
+  private remoteSettingsEl: HTMLElement | null = null;
 
   constructor(app: App, plugin: Plugin & PluginLike) {
     super(app, plugin);
@@ -53,7 +58,8 @@ export class SettingTab extends PluginSettingTab {
 
     this.addUploadCommandSettings(containerEl);
     this.addUploadRulesSettings(containerEl);
-    this.addRemoteImageSettings(containerEl);
+    this.remoteSettingsEl = containerEl.createDiv();
+    this.addRemoteImageSettings(this.remoteSettingsEl);
   }
 
   /**
@@ -91,6 +97,10 @@ export class SettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.uploadCommand)
           .onChange(async (value) => {
             this.plugin.settings.uploadCommand = value;
+            if (this.remoteSettingsEl) {
+              this.remoteSettingsEl.empty();
+              this.addRemoteImageSettings(this.remoteSettingsEl);
+            }
             await this.plugin.saveSettings();
           })
           .setDisabled(this.plugin.settings.uploadService !== "custom")
@@ -175,6 +185,47 @@ export class SettingTab extends PluginSettingTab {
       );
   }
 
+  private addRemoteImageLimits(containerEl: HTMLElement): void {
+    const labels: Record<RemoteImageLimitKey, Parameters<typeof t>[0]> = {
+      remoteImageMaxUniqueUrls: "Maximum unique image URLs per operation",
+      remoteImageDownloadConcurrency: "Concurrent image downloads",
+      remoteImageMaxImageMiB: "Maximum image size (MiB)",
+      remoteImageBatchMiB: "Maximum batch size (MiB)",
+      remoteImageDownloadTimeoutSeconds: "Image download timeout (seconds)",
+      remoteImageMaxRedirects: "Maximum image redirects",
+    };
+    for (const key of Object.keys(labels) as RemoteImageLimitKey[]) {
+      const { min, max } = remoteImageLimitRange(key);
+      new Setting(containerEl)
+        .setName(t(labels[key]))
+        .setDesc(
+          `${t("Default:")} ${REMOTE_IMAGE_LIMIT_DEFAULTS[key]}. ${
+            key === "remoteImageMaxRedirects"
+              ? t("Use a non-negative integer. Zero disables redirects.")
+              : t("Use a positive integer.")
+          }`,
+        )
+        .addText((text) => {
+          text.setValue(String(this.plugin.settings[key]));
+          const input = text.inputEl;
+          input.type = "number";
+          input.min = String(min);
+          input.max = String(max);
+          input.step = "1";
+          input.addEventListener("change", async () => {
+            const value = input.value.trim() ? Number(input.value) : Number.NaN;
+            if (!isRemoteImageLimit(key, value)) {
+              new Notice(`${t("Enter an integer in this range:")} ${min}–${max}`);
+              text.setValue(String(this.plugin.settings[key]));
+              return;
+            }
+            this.plugin.settings[key] = value;
+            await this.plugin.saveSettings();
+          });
+        });
+    }
+  }
+
   private detectionReasonText(reason: UploadTargetReason | null): string {
     return reason ? t(DETECTION_REASONS[reason]) : "";
   }
@@ -221,6 +272,8 @@ export class SettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+
+    this.addRemoteImageLimits(containerEl);
 
     const stored = settings.remoteImageAutoHostRules[scopeKey];
     const detectionDescription = [

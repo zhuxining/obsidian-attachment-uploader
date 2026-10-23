@@ -63,7 +63,7 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 3. To transfer remote images, use `Transfer remote images in current note`, `Transfer remote images in selection`, or right-click an image in the editor for `Transfer this image` / `Force re-upload this image`
 4. Pasting Markdown text follows the remote image paste policy. In `ask` mode, the text is inserted immediately and a notice offers to transfer only that pasted range
 
-Remote transfer limits: at most 100 unique URLs per operation, 3 concurrent downloads, 20 MiB per image, 200 MiB per batch, 30 seconds per download and 3 redirects. Localhost, private, link-local, multicast and documentation addresses are rejected by default. A failed download or upload keeps the original link; the plugin never creates a Vault attachment for a remote image. Secrets, cookies and browser credentials are not used.
+Remote image transfer limits can be changed in the plugin settings under **Remote images**. Defaults: at most 100 unique URLs per operation, 3 concurrent downloads, 20 MiB per image, 200 MiB per batch, 30 seconds per download and 3 redirects. Enter positive integers; redirects also accept 0 to disable following redirects. Changes apply to the next operation. Existing installations use these defaults until changed.
 
 ## Credits
 

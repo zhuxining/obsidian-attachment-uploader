@@ -43,10 +43,15 @@ import AttachmentUploader from "../src/main";
 import type { RemoteImageScope } from "../src/services/imageTransferService";
 import { RemoteImageDownloader } from "../src/services/remoteImageDownloader";
 import { UploadService } from "../src/services/uploadService";
-import { remoteImageRuleScopeKey, type RemoteImagePastePolicy } from "../src/settings";
+import {
+  REMOTE_IMAGE_LIMIT_DEFAULTS,
+  remoteImageRuleScopeKey,
+  type RemoteImagePastePolicy,
+} from "../src/settings";
 
 function fullSettings() {
   return {
+    ...REMOTE_IMAGE_LIMIT_DEFAULTS,
     uploadService: "uPic" as const,
     uploadCommand: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
     testFilePath: "",
@@ -419,6 +424,40 @@ test("resolves an unresolved reference against a definition already in the note"
     start: definition.length,
     end: definition.length + text.length,
   });
+});
+
+test.each(["auto", "ask"] as const)(
+  "handles mixed local and externally defined remote images in %s mode",
+  async (policy) => {
+    const { plugin, start } = createPlugin({ remoteImagePastePolicy: policy });
+    const definition = "[remote]: https://cdn.example/a.png\n\n";
+    const editor = fakeEditor(definition);
+    const text = "![local](assets/local.png)\n![remote][remote]";
+    const noticeCount = notices().length;
+    const { event } = await paste(plugin, text, { editor });
+    expect(event.defaultPrevented).toBe(true);
+    expect(editor.getValue()).toBe(definition + text);
+    if (policy === "auto") {
+      expect(start).toHaveBeenCalledOnce();
+      expect(start.mock.calls[0]![1]).toMatchObject({
+        kind: "paste",
+        start: definition.length,
+        end: definition.length + text.length,
+      });
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(start).not.toHaveBeenCalled();
+      expect(notices()).toHaveLength(noticeCount + 1);
+      expect(String(notices().at(-1)?.message)).toBe("1 pasted remote images can be transferred");
+    }
+  },
+);
+
+test("leaves mixed local images and an undefined reference to Obsidian", async () => {
+  const { plugin, start } = createPlugin({ remoteImagePastePolicy: "auto" });
+  const { event } = await paste(plugin, "![local](assets/local.png)\n![remote][missing]");
+  expect(event.defaultPrevented).toBe(false);
+  expect(start).not.toHaveBeenCalled();
 });
 
 test("leaves a pasted fragment with only local reference images to Obsidian", async () => {

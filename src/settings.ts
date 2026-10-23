@@ -13,7 +13,39 @@ export interface RemoteImageAutoRule {
   fingerprint: string;
 }
 
-export interface PluginSettings {
+export const REMOTE_IMAGE_LIMIT_DEFAULTS = {
+  remoteImageMaxUniqueUrls: 100,
+  remoteImageDownloadConcurrency: 3,
+  remoteImageMaxImageMiB: 20,
+  remoteImageBatchMiB: 200,
+  remoteImageDownloadTimeoutSeconds: 30,
+  remoteImageMaxRedirects: 3,
+} as const;
+
+export type RemoteImageLimitKey = keyof typeof REMOTE_IMAGE_LIMIT_DEFAULTS;
+
+const MIB_BYTES = 1024 * 1024;
+const MAX_TIMER_MS = 2_147_483_647;
+
+export function remoteImageLimitRange(key: RemoteImageLimitKey): { min: number; max: number } {
+  const min = key === "remoteImageMaxRedirects" ? 0 : 1;
+  if (key === "remoteImageMaxImageMiB" || key === "remoteImageBatchMiB") {
+    return { min, max: Math.floor(Number.MAX_SAFE_INTEGER / MIB_BYTES) };
+  }
+  if (key === "remoteImageDownloadTimeoutSeconds") {
+    return { min, max: Math.floor(MAX_TIMER_MS / 1000) };
+  }
+  return { min, max: Number.MAX_SAFE_INTEGER };
+}
+
+export function isRemoteImageLimit(key: RemoteImageLimitKey, value: unknown): value is number {
+  const { min, max } = remoteImageLimitRange(key);
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+
+type RemoteImageLimits = Record<RemoteImageLimitKey, number>;
+
+export interface PluginSettings extends RemoteImageLimits {
   uploadService: UploadServiceName;
   uploadCommand: string;
   testFilePath: string;
@@ -131,7 +163,13 @@ export function parseSettings(value: unknown): PluginSettings {
   const data: Record<string, unknown> =
     value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const uploadService = isUploadServiceName(data.uploadService) ? data.uploadService : "uPic";
+  const limits: RemoteImageLimits = { ...REMOTE_IMAGE_LIMIT_DEFAULTS };
+  for (const key of Object.keys(limits) as RemoteImageLimitKey[]) {
+    const value = data[key];
+    if (isRemoteImageLimit(key, value)) limits[key] = value;
+  }
   return {
+    ...limits,
     uploadService,
     uploadCommand:
       typeof data.uploadCommand === "string"

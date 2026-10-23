@@ -10,8 +10,10 @@ import {
   type RemoteImageDownloadFailureCode,
 } from "./remoteImageDownloader";
 import { buildRemoteImageReplacements, type TextChange } from "./remoteImageRewriter";
+import { UploadCancelledError } from "./uploadCommandQueue";
 import type { UploadResult } from "./uploadService";
 import { isOwnRemoteImageUrl, type RemoteHostPrefix } from "./uploadTargetResolver";
+import { toMarkdownUrl } from "./url";
 
 export const MAX_UNIQUE_REMOTE_IMAGES = 100;
 export const MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -187,8 +189,15 @@ function classifyError(error: unknown): RemoteImageDownloadFailureCode {
   return error instanceof RemoteImageDownloadError ? error.code : "network";
 }
 
+export function remoteImageSessionKey(url: string): string {
+  const formatted = toMarkdownUrl(url);
+  return formatted.startsWith("<") && formatted.endsWith(">")
+    ? formatted.slice(1, -1)
+    : formatted;
+}
+
 function rememberSessionOutput(outputs: Set<string>, url: string): void {
-  outputs.add(url);
+  outputs.add(remoteImageSessionKey(url));
   if (outputs.size <= MAX_SESSION_OUTPUT_URLS) return;
   const oldest = outputs.values().next().value;
   if (oldest !== undefined) outputs.delete(oldest);
@@ -231,7 +240,7 @@ export class ImageTransferService {
       if (input.mode !== "force") {
         if (
           isOwnRemoteImageUrl(reference.url, settings.prefixes) ||
-          this.deps.sessionOutputs.has(reference.url)
+          this.deps.sessionOutputs.has(remoteImageSessionKey(reference.url))
         ) {
           skippedUrls.add(reference.url);
           continue;
@@ -316,6 +325,10 @@ export class ImageTransferService {
       try {
         upload = await this.deps.upload(outcome.file.path);
       } catch (error) {
+        if (signal.aborted && error instanceof UploadCancelledError) {
+          await this.deps.downloader.release(outcome.file.path);
+          break;
+        }
         upload = { success: false, errorMessage: (error as Error).message };
       }
       await this.deps.downloader.release(outcome.file.path);

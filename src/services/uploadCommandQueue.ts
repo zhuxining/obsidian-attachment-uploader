@@ -2,6 +2,13 @@ interface PendingUpload {
   run(): void;
 }
 
+export class UploadCancelledError extends Error {
+  constructor() {
+    super("Upload cancelled before execution");
+    this.name = "UploadCancelledError";
+  }
+}
+
 /** One external process at a time. Cancelling a waiter never interrupts a running upload. */
 export class UploadCommandQueue {
   private running = false;
@@ -12,7 +19,7 @@ export class UploadCommandQueue {
       const abort = () => {
         const index = this.pending.indexOf(job);
         if (index >= 0) this.pending.splice(index, 1);
-        reject(new Error("Upload cancelled before execution"));
+        reject(new UploadCancelledError());
       };
       const job: PendingUpload = {
         run: () => {

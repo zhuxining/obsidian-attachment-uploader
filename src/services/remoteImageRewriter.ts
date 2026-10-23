@@ -47,18 +47,6 @@ function formatDestination(content: string, start: number, end: number, url: str
   return unwrapped;
 }
 
-function nextDefinitionId(used: Set<string>, prefix: string, counter: { value: number }): string {
-  for (;;) {
-    counter.value += 1;
-    const candidate = `${prefix}-${counter.value}`;
-    if (!used.has(candidate) && !used.has(candidate.toLowerCase())) {
-      used.add(candidate);
-      used.add(candidate.toLowerCase());
-      return candidate;
-    }
-  }
-}
-
 function definitionUsesOnlyInScopeImages(
   definition: ImageDefinitionToken,
   referencesByStart: Map<number, RemoteImageReference>,
@@ -74,15 +62,15 @@ function definitionUsesOnlyInScopeImages(
 /**
  * Build a single transaction that rewrites only the destination of in-scope
  * image references. Shared reference definitions are never modified when an
- * ordinary link or an out-of-scope image also uses them: those images receive a
- * private definition instead.
+ * ordinary link or an out-of-scope image also uses them: those images become
+ * inline images with the original label and title instead.
  */
 export function buildRemoteImageReplacements(
   content: string,
   document: RemoteImageDocument,
   replacements: ReadonlyMap<string, string>,
   inScope: (start: number, end: number) => boolean,
-  options: ReplacementOptions = {},
+  _options: ReplacementOptions = {},
 ): RemoteImageReplacementPlan | null {
   const changes: TextChange[] = [];
   const appliedUrls = new Set<string>();
@@ -90,11 +78,6 @@ export function buildRemoteImageReplacements(
     document.references.map((reference) => [reference.start, reference]),
   );
   const rewrittenDefinitions = new Set<string>();
-  const privateDefinitions = new Map<string, string>();
-  const appended: Array<{ id: string; url: string }> = [];
-  const usedIdentifiers = new Set(document.definitions.map((definition) => definition.identifier));
-  const definitionIdPrefix = options.definitionIdPrefix ?? "attachment-uploader";
-  const counter = { value: 0 };
 
   for (const reference of document.references) {
     if (!inScope(reference.start, reference.end)) continue;
@@ -120,9 +103,11 @@ export function buildRemoteImageReplacements(
       continue;
     }
 
-    const canRewriteDefinition =
-      definitionUsesOnlyInScopeImages(definition, referencesByStart, inScope) &&
-      inScope(definition.start, definition.end);
+    const canRewriteDefinition = definitionUsesOnlyInScopeImages(
+      definition,
+      referencesByStart,
+      inScope,
+    );
 
     if (canRewriteDefinition) {
       changes.push({
@@ -135,29 +120,24 @@ export function buildRemoteImageReplacements(
       continue;
     }
 
-    let privateId = privateDefinitions.get(definition.identifier);
-    if (!privateId) {
-      privateId = nextDefinitionId(usedIdentifiers, definitionIdPrefix, counter);
-      privateDefinitions.set(definition.identifier, privateId);
-      appended.push({ id: privateId, url: newUrl });
-    }
-
-    if (reference.referenceStart !== null && reference.referenceEnd !== null) {
-      changes.push({
-        start: reference.referenceStart,
-        end: reference.referenceEnd,
-        text: `[${privateId}]`,
-      });
-    } else {
-      changes.push({ start: reference.end, end: reference.end, text: `[${privateId}]` });
-    }
+    const label = content.slice(reference.start, reference.referenceStart ?? reference.end);
+    // Serialize the parsed title so blockquote/list prefixes cannot enter the image.
+    const title = definition.title === null
+      ? ""
+      : ` "${definition.title
+          .replace(/&/g, "&amp;")
+          .replace(/\\/g, "&#92;")
+          .replace(/"/g, "&quot;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\r/g, "&#13;")
+          .replace(/\n/g, "&#10;")}"`;
+    changes.push({
+      start: reference.start,
+      end: reference.end,
+      text: `${label}(${toMarkdownUrl(newUrl)}${title})`,
+    });
     appliedUrls.add(reference.url);
-  }
-
-  if (appended.length) {
-    const separator = content.endsWith("\n\n") ? "" : content.endsWith("\n") ? "\n" : "\n\n";
-    const block = appended.map(({ id, url }) => `[${id}]: ${toMarkdownUrl(url)}`).join("\n");
-    changes.push({ start: content.length, end: content.length, text: `${separator}${block}\n` });
   }
 
   const sorted = [...changes].sort((a, b) => a.start - b.start || a.end - b.end);

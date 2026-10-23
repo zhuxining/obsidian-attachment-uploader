@@ -51,8 +51,17 @@ export default {
   Applying: "Applying",
   "Too many remote images to transfer in one operation.":
     "Too many remote images to transfer in one operation.",
-  "Narrow the scope to at most 100 unique images.":
-    "Narrow the scope to at most 100 unique images.",
+  "Maximum unique image URLs per operation": "Maximum unique image URLs per operation",
+  "Concurrent image downloads": "Concurrent image downloads",
+  "Maximum image size (MiB)": "Maximum image size (MiB)",
+  "Maximum batch size (MiB)": "Maximum batch size (MiB)",
+  "Image download timeout (seconds)": "Image download timeout (seconds)",
+  "Maximum image redirects": "Maximum image redirects",
+  "Default:": "Default:",
+  "Use a non-negative integer. Zero disables redirects.":
+    "Use a non-negative integer. Zero disables redirects.",
+  "Use a positive integer.": "Use a positive integer.",
+  "Enter an integer in this range:": "Enter an integer in this range:",
   "Transferred:": "Transferred:",
   "Failed:": "Failed:",
   "Skipped:": "Skipped:",

@@ -30,6 +30,7 @@ export interface ImageDefinitionToken {
   targetStart: number;
   targetEnd: number;
   url: string;
+  title: string | null;
   uses: Array<{ kind: "image" | "link"; start: number; end: number }>;
 }
 
@@ -77,6 +78,7 @@ interface RawDefinitionNode {
   start: number;
   end: number;
   url: string;
+  title: string | null;
 }
 
 interface RawLinkReferenceNode {
@@ -172,7 +174,13 @@ function parseImageStructure(content: string): ImageStructure {
     if (start === undefined || end === undefined) return;
 
     if (node.type === "definition") {
-      definitions.push({ identifier: node.identifier, start, end, url: node.url });
+      definitions.push({
+        identifier: node.identifier,
+        start,
+        end,
+        url: node.url,
+        title: node.title ?? null,
+      });
     }
     if (node.type === "image") {
       images.push({
@@ -269,6 +277,7 @@ function analyzeImages(content: string): {
       targetStart: target?.[0] ?? -1,
       targetEnd: target?.[1] ?? -1,
       url: definition.url,
+      title: definition.title,
       uses: [],
     });
   }
@@ -278,6 +287,11 @@ function analyzeImages(content: string): {
   let hasUnresolvedReferences = false;
 
   for (const image of structure.images) {
+    const definition = image.identifier
+      ? definitionsByIdentifier.get(image.identifier)
+      : undefined;
+    // Excluded images still use their definition and must prevent a shared rewrite.
+    definition?.uses.push({ kind: "image", start: image.start, end: image.end });
     if (isInsideHtml(structure.htmlRanges, image.start, image.end)) continue;
     if (image.kind === "inline") {
       const target = tokenRanges.inlineTargets.get(image.start);
@@ -300,13 +314,10 @@ function analyzeImages(content: string): {
       continue;
     }
 
-    const identifier = image.identifier;
-    const definition = identifier ? definitionsByIdentifier.get(identifier) : undefined;
     if (!definition) {
       hasUnresolvedReferences = true;
       continue;
     }
-    definition.uses.push({ kind: "image", start: image.start, end: image.end });
     images.push({ start: image.start, end: image.end, path: definition.url, alt: image.alt });
     if (!REMOTE_IMAGE_URL.test(definition.url)) continue;
     if (definition.targetStart < 0) continue;

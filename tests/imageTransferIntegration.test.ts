@@ -27,7 +27,7 @@ test("downloads, uploads and rewrites duplicate references end to end", async ()
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as AddressInfo;
-  const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+  const downloader = new RemoteImageDownloader();
   let content = "";
   const document: TransferDocumentAccess = {
     read: async () => ({ content, live: true }),
@@ -91,7 +91,7 @@ test("keeps the original link when the server returns an HTML page", async () =>
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as AddressInfo;
-  const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+  const downloader = new RemoteImageDownloader();
   let content = `![](http://127.0.0.1:${address.port}/login.png)`;
   const uploaded: string[] = [];
   const preserveReceipt = vi.fn<() => Promise<void>>(async () => {});

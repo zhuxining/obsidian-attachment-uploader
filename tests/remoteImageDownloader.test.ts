@@ -7,7 +7,6 @@ import { expect, test, vi } from "vite-plus/test";
 vi.mock("obsidian", () => ({}));
 
 import {
-  isBlockedNetworkAddress,
   RemoteImageDownloader,
   RemoteImageDownloadError,
   sniffImageType,
@@ -43,7 +42,7 @@ test("streams an image to an isolated temporary file", async () => {
       response.end(PNG);
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       try {
         const result = await downloader.download(`${base}/image-without-extension`);
         expect(result.extension).toBe("png");
@@ -71,7 +70,7 @@ test("follows a redirect and re-validates the destination", async () => {
       response.end(Buffer.from("GIF89a", "latin1"));
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       try {
         const result = await downloader.download(`${base}/start`);
         expect(result.extension).toBe("gif");
@@ -91,7 +90,6 @@ test("refuses to exceed the redirect limit", async () => {
     },
     async (base) => {
       const downloader = new RemoteImageDownloader({
-        allowPrivateAddresses: true,
         maxRedirects: 1,
       });
       try {
@@ -110,7 +108,7 @@ test("rejects an HTML login page even when it is labelled as an image", async ()
       response.end("<!doctype html><html><body>sign in</body></html>");
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       try {
         await expectCode(downloader.download(`${base}/login.png`), "not-an-image");
         expect(await downloader.release(`${base}/none`)).toBeUndefined();
@@ -130,7 +128,6 @@ test("enforces the per-image size limit before buffering the whole body", async 
     },
     async (base) => {
       const downloader = new RemoteImageDownloader({
-        allowPrivateAddresses: true,
         maxBytes: 10,
       });
       try {
@@ -150,7 +147,7 @@ test("enforces the shared batch budget across downloads", async () => {
       response.end(PNG);
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       const budget = { used: 0, limit: PNG.length + 10 };
       try {
         await downloader.download(`${base}/one.png`, { budget });
@@ -162,7 +159,7 @@ test("enforces the shared batch budget across downloads", async () => {
   );
 });
 
-test("blocks loopback addresses by default", async () => {
+test("downloads loopback image sources without a special address policy", async () => {
   expect.hasAssertions();
   await withServer(
     (_request, response) => {
@@ -172,7 +169,8 @@ test("blocks loopback addresses by default", async () => {
     async (base) => {
       const downloader = new RemoteImageDownloader();
       try {
-        await expectCode(downloader.download(`${base}/a.png`), "blocked-address");
+        const image = await downloader.download(`${base}/a.png`);
+        expect(await readFile(image.path)).toEqual(PNG);
       } finally {
         await downloader.dispose();
       }
@@ -188,7 +186,7 @@ test("aborts an in-progress download", async () => {
       response.write(PNG.subarray(0, 8));
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       const controller = new AbortController();
       try {
         const operation = downloader.download(`${base}/slow.png`, {
@@ -211,7 +209,7 @@ test("times out a stalled connection", async () => {
       // Never respond.
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       try {
         await expectCode(downloader.download(`${base}/stall.png`, { timeoutMs: 40 }), "timeout");
       } finally {
@@ -250,25 +248,8 @@ test("sniffs supported image signatures and rejects unknown responses", () => {
   ).toBeNull();
 });
 
-test("blocks local control addresses while allowing intranet and VPN sources", () => {
-  for (const address of [
-    "127.0.0.1", "169.254.169.254", "0.0.0.0", "224.0.0.1", "255.255.255.255",
-    "::", "::1", "fe80::1", "ff02::1", "::ffff:127.0.0.1", "::ffff:169.254.1.1",
-  ]) {
-    expect(isBlockedNetworkAddress(address)).toBe(true);
-  }
-  for (const address of [
-    "1.1.1.1", "8.8.8.8", "2606:4700:4700::1111",
-    "10.1.2.3", "172.16.0.1", "192.168.1.1", "100.64.0.1",
-    "198.18.0.1", "198.19.255.254", "fc00::1", "fd00::1", "::ffff:10.1.2.3",
-    "192.0.2.1", "2001:db8::1",
-  ]) {
-    expect(isBlockedNetworkAddress(address)).toBe(false);
-  }
-});
-
 test("exposes a typed error for unsupported URL schemes", async () => {
-  const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+  const downloader = new RemoteImageDownloader();
   try {
     await expect(downloader.download("file:///etc/passwd")).rejects.toBeInstanceOf(
       RemoteImageDownloadError,
@@ -293,7 +274,7 @@ test.each(["timeout", "aborted"])("settles and cleans a stalled gzip body on %s"
       response.write(GZIP_HEADER);
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       const controller = new AbortController();
       const timer = code === "aborted" ? setTimeout(() => controller.abort(), 60) : undefined;
       try {
@@ -329,7 +310,7 @@ test("settles when a compressed response disconnects prematurely", async () => {
       setTimeout(() => response.destroy(), 30);
     },
     async (base) => {
-      const downloader = new RemoteImageDownloader({ allowPrivateAddresses: true });
+      const downloader = new RemoteImageDownloader();
       try {
         await expectCode(downloader.download(base, { timeoutMs: 2000 }), "network");
       } finally {

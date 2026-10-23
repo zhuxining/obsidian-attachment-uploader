@@ -46,7 +46,7 @@ test("replaces a definition when every use is an in-scope image", () => {
   expect(result.content).toBe('![a][photo]\n\n[photo]: https://cdn.example/b.png "Title"\n');
 });
 
-test("creates a private definition when an ordinary link shares it", () => {
+test("inlines the image when an ordinary link shares its definition", () => {
   const content = [
     "![a][photo] [download][photo]",
     "",
@@ -54,12 +54,15 @@ test("creates a private definition when an ordinary link shares it", () => {
     "",
   ].join("\n");
   const result = rewrite(content, { "https://cdn.example/a.png": "https://cdn.example/b.png" });
-  expect(result.content).toContain("![a][attachment-uploader-1] [download][photo]");
-  expect(result.content).toContain('[photo]: <https://cdn.example/a.png> "Title"');
-  expect(result.content).toContain("[attachment-uploader-1]: https://cdn.example/b.png");
+  expect(result.content).toBe([
+    '![a](https://cdn.example/b.png "Title") [download][photo]',
+    "",
+    '[photo]: <https://cdn.example/a.png> "Title"',
+    "",
+  ].join("\n"));
 });
 
-test("rewrites collapsed and shortcut references through one private definition", () => {
+test("inlines collapsed and shortcut images while preserving the shared definition", () => {
   const content = [
     "![photo][] and ![photo] plus [link][photo]",
     "",
@@ -67,11 +70,12 @@ test("rewrites collapsed and shortcut references through one private definition"
     "",
   ].join("\n");
   const result = rewrite(content, { "https://cdn.example/a.png": "https://cdn.example/b.png" });
-  expect(result.content).toContain(
-    "![photo][attachment-uploader-1] and ![photo][attachment-uploader-1] plus [link][photo]",
-  );
-  expect(result.content).toContain("[photo]: https://cdn.example/a.png");
-  expect(result.content).toContain("[attachment-uploader-1]: https://cdn.example/b.png");
+  expect(result.content).toBe([
+    "![photo](https://cdn.example/b.png) and ![photo](https://cdn.example/b.png) plus [link][photo]",
+    "",
+    "[photo]: https://cdn.example/a.png",
+    "",
+  ].join("\n"));
 });
 
 test("only rewrites the selection and leaves out-of-scope images untouched", () => {
@@ -93,10 +97,14 @@ test("only rewrites the selection and leaves out-of-scope images untouched", () 
   );
   expect(plan).not.toBeNull();
   const updated = applyTextChanges(content, plan!.changes);
-  expect(updated).toContain("![one][photo]");
-  expect(updated).toContain("![two][attachment-uploader-1]");
-  expect(updated).toContain("[photo]: https://cdn.example/a.png");
-  expect(updated).toContain("[attachment-uploader-1]: https://cdn.example/b.png");
+  expect(updated).toBe([
+    "![one][photo]",
+    "",
+    "![two](https://cdn.example/b.png)",
+    "",
+    "[photo]: https://cdn.example/a.png",
+    "",
+  ].join("\n"));
 });
 
 test("applies one URL replacement to every duplicate reference", () => {

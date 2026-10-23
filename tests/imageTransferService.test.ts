@@ -16,6 +16,7 @@ import {
 } from "../src/services/imageTransferService";
 import { RemoteImageDownloadError } from "../src/services/remoteImageDownloader";
 import { applyTextChanges, type TextChange } from "../src/services/remoteImageRewriter";
+import { UploadCommandQueue } from "../src/services/uploadCommandQueue";
 
 function settings(overrides: Partial<RemoteImageTransferSettings> = {}) {
   return {
@@ -202,6 +203,71 @@ test("skips own prefixes and known session outputs, while force mode bypasses bo
   expect(second.downloader.downloads).toHaveLength(2);
 });
 
+test.each([
+  ["https://cdn.example/截图.png", "https://cdn.example/%E6%88%AA%E5%9B%BE.png"],
+  ["https://cdn.example/a b.png", "https://cdn.example/a%20b.png"],
+  ["https://cdn.example/a%2520b.png", "https://cdn.example/a%20b.png"],
+  ["https://cdn.example/a (1).png", "<https://cdn.example/a%20(1).png>"],
+])("skips a previously uploaded URL after Markdown normalization: %s", async (url, destination) => {
+  const harness = createHarness("![](https://source.example/a.png)", {
+    upload: async () => ({ success: true, url }),
+  });
+  const first = await harness.run({ kind: "note" });
+  expect(first.succeeded).toBe(1);
+  expect(harness.document.getValue()).toBe(`![](${destination})`);
+
+  const second = await harness.run({ kind: "note" });
+  expect(second).toMatchObject({ succeeded: 0, skipped: 1, failed: 0 });
+  expect(harness.downloader.downloads).toHaveLength(1);
+  expect(harness.upload).toHaveBeenCalledOnce();
+});
+
+test("cancelling a queued upload does not count as an upload failure", async () => {
+  const queue = new UploadCommandQueue();
+  const controller = new AbortController();
+  let release!: () => void;
+  const blocker = queue.enqueue(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const execute = vi.fn(async () => ({ success: true, url: "https://cdn.example/a.png" }));
+  const original = "![](https://source.example/a.png)";
+  const harness = createHarness(original, {
+    upload: async () => {
+      const pending = queue.enqueue(execute, controller.signal);
+      controller.abort();
+      return await pending;
+    },
+  });
+  try {
+    const summary = await harness.run({ kind: "note" }, { signal: controller.signal });
+    expect(summary).toMatchObject({ cancelled: true, failed: 0, succeeded: 0, errors: [] });
+    expect(execute).not.toHaveBeenCalled();
+    expect(harness.document.getValue()).toBe(original);
+    expect(harness.downloader.released).toEqual(["/tmp/download-1.png"]);
+    expect(harness.preserveReceipt).not.toHaveBeenCalled();
+  } finally {
+    release();
+    await blocker;
+  }
+  expect(execute).not.toHaveBeenCalled();
+});
+
+test("keeps a real upload failure when cancellation happens during execution", async () => {
+  const controller = new AbortController();
+  const harness = createHarness("![](https://source.example/a.png)", {
+    upload: async () => {
+      controller.abort();
+      throw new Error("Uploader failed");
+    },
+  });
+  const summary = await harness.run({ kind: "note" }, { signal: controller.signal });
+  expect(summary).toMatchObject({ cancelled: true, failed: 1 });
+  expect(summary.errors).toEqual([{ code: "upload-failed", url: "https://source.example/a.png" }]);
+});
+
 test("keeps the original link when a download fails", async () => {
   const downloader = createDownloader({
     fail: new Map([["https://cdn.example/a.png", "not-an-image"]]),
@@ -321,7 +387,7 @@ test("skips formats excluded by the existing upload settings", async () => {
   expect(harness.document.getValue()).toBe("![](https://cdn.example/a.svg)");
 });
 
-test("uses a private definition instead of changing a shared ordinary link", async () => {
+test("inlines the transferred image and preserves a shared ordinary link", async () => {
   const content = ["![a][photo] [download][photo]", "", "[photo]: https://cdn.example/a.png"].join(
     "\n",
   );
@@ -329,9 +395,13 @@ test("uses a private definition instead of changing a shared ordinary link", asy
   const summary = await harness.run({ kind: "note" });
   expect(summary.succeeded).toBe(1);
   const updated = harness.document.getValue();
-  expect(updated).toContain("![a][attachment-uploader-1] [download][photo]");
-  expect(updated).toContain("[photo]: https://cdn.example/a.png");
-  expect(updated).toContain("[attachment-uploader-1]: https://cdn.example/uploaded-1.png");
+  expect(updated).toBe(
+    [
+      "![a](https://cdn.example/uploaded-1.png) [download][photo]",
+      "",
+      "[photo]: https://cdn.example/a.png",
+    ].join("\n"),
+  );
 });
 
 test("force mode re-uploads a single image without touching identical neighbours", async () => {
@@ -559,4 +629,33 @@ test("cancelling during the final source read prevents replacement and preserves
   expect(harness.document.apply).not.toHaveBeenCalled();
   expect(harness.preserveReceipt).toHaveBeenCalledOnce();
   expect(summary).toMatchObject({ cancelled: true, notApplied: 1 });
+});
+
+test("allows more than 100 URLs when configured and forwards download limits", async () => {
+  const content = Array.from(
+    { length: 101 },
+    (_, index) => `![](https://cdn.example/${index}.png)`,
+  ).join("\n");
+  const harness = createHarness(content);
+  const summary = await harness.run(
+    { kind: "note" },
+    {
+      settings: settings({
+        maxUniqueUrls: 101,
+        maxImageBytes: 80 * 1024 * 1024,
+        batchBytes: 1000 * 1024 * 1024,
+        downloadTimeoutMs: 120_000,
+        downloadConcurrency: 1,
+      }),
+    },
+  );
+  expect(summary.limitExceeded).toBe(false);
+  expect(summary.succeeded).toBe(101);
+  expect(harness.downloader.download).toHaveBeenCalledTimes(101);
+  expect(harness.downloader.download).toHaveBeenCalledWith("https://cdn.example/0.png", {
+    signal: expect.any(AbortSignal),
+    maxBytes: 80 * 1024 * 1024,
+    timeoutMs: 120_000,
+    budget: { used: 0, limit: 1000 * 1024 * 1024 },
+  });
 });
