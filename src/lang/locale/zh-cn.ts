@@ -73,7 +73,7 @@ export default {
     "命令中须保留一个独立的 %s 参数，用于传入文件路径。上传程序须在标准输出中返回一个 HTTP(S) 地址。",
   "Test upload": "上传测试",
   "Testing uploads the selected file to your configured host.": "测试会实际上传指定文件。",
-  "Upload behavior": "上传选项",
+  "Upload options": "上传选项",
   "Automatically upload attachments when pasting or dragging files.":
     "粘贴截图、粘贴或拖入文件时，自动上传并插入链接。",
   "Include remote images": "包含外链图片",

@@ -942,7 +942,7 @@ test("cancelling a local upload waiting behind another command is not reported a
     vault: {
       getFiles: () => [source],
       adapter: { getBasePath: () => "/vault" },
-      getAbstractFileByPath: () => null,
+      getFileByPath: () => null,
     },
     metadataCache: { getFirstLinkpathDest: () => source },
     workspace: { activeEditor: view, getLeavesOfType: () => [] },

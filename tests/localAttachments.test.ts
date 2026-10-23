@@ -76,7 +76,7 @@ function fixture() {
   const app = {
     vault: {
       getFiles: () => files,
-      getAbstractFileByPath: () => null,
+      getFileByPath: () => null,
       adapter: { getBasePath: () => "/vault" },
     },
     metadataCache: {
@@ -109,13 +109,13 @@ function deletionFixture() {
     async () => ({ type: "file", size: 10, mtime: 1 }),
   );
   const trashFile = vi.fn<App["fileManager"]["trashFile"]>(async () => {});
-  const getAbstractFileByPath = vi.fn<(path: string) => TFile | null>((path) =>
+  const getFileByPath = vi.fn<(path: string) => TFile | null>((path) =>
     path === source.path ? source : null,
   );
   const app = {
     vault: {
       getFiles: () => files,
-      getAbstractFileByPath,
+      getFileByPath,
       cachedRead,
       adapter: { getBasePath: () => "/vault", stat },
     },
@@ -139,7 +139,7 @@ function deletionFixture() {
     cachedRead,
     stat,
     trashFile,
-    getAbstractFileByPath,
+    getFileByPath,
     upload,
     process,
   };
@@ -286,7 +286,7 @@ describe("conservative source deletion", () => {
         if (change === "mtime")
           context.stat.mockResolvedValue({ type: "file", size: 10, mtime: 2 });
         if (change === "identity")
-          context.getAbstractFileByPath.mockReturnValue(Object.assign(new TFile(), context.source));
+          context.getFileByPath.mockReturnValue(Object.assign(new TFile(), context.source));
         if (change === "path") context.source.path = "assets/renamed.png";
         return { success: true, url: "https://cdn.example/a.png" };
       });

@@ -77,7 +77,7 @@ export default {
   "Test upload": "Test upload",
   "Testing uploads the selected file to your configured host.":
     "Testing uploads the selected file to your configured host.",
-  "Upload behavior": "Upload behavior",
+  "Upload options": "Upload options",
   "Automatically upload attachments when pasting or dragging files.":
     "Automatically upload attachments when pasting or dragging files.",
   "Include remote images": "Include remote images",

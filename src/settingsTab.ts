@@ -1,8 +1,19 @@
-import { type App, type Plugin, Notice, PluginSettingTab, Setting } from "obsidian";
+import {
+  type App,
+  Notice,
+  PluginSettingTab,
+  type Plugin,
+  type Setting,
+  type SettingDefinitionItem,
+} from "obsidian";
 
 import { t } from "./lang/helpers";
-import { uploadCommandDict } from "./settings";
-import { isUploadServiceName, parseUploadFormats, type PluginSettings } from "./settings";
+import {
+  isUploadServiceName,
+  parseUploadFormats,
+  uploadCommandDict,
+  type PluginSettings,
+} from "./settings";
 
 interface PluginLike {
   settings: PluginSettings;
@@ -18,50 +29,139 @@ export class SettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    this.addUploadCommandSettings(containerEl);
-    this.addUploadRulesSettings(containerEl);
-    this.addSkipRulesSettings(containerEl);
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return [
+      {
+        type: "group",
+        heading: t("Upload tool"),
+        items: [
+          {
+            name: t("Upload service"),
+            control: {
+              type: "dropdown",
+              key: "uploadService",
+              options: { uPic: "uPic", Picsee: "Picsee", custom: t("Custom") },
+            },
+          },
+          {
+            name: t("Executed command"),
+            desc: t("Upload command instructions"),
+            visible: () => this.plugin.settings.uploadService === "custom",
+            control: { type: "textarea", key: "uploadCommand", rows: 5 },
+          },
+          {
+            name: t("Test upload"),
+            desc: t("Testing uploads the selected file to your configured host."),
+            render: (setting) => this.renderTestUpload(setting),
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: t("Upload options"),
+        items: [
+          {
+            name: t("Auto upload"),
+            desc: t("Automatically upload attachments when pasting or dragging files."),
+            control: { type: "toggle", key: "autoUpload" },
+          },
+          {
+            name: t("Include remote images"),
+            desc: t("Also transfer HTTP(S) images in pasted Markdown text."),
+            control: {
+              type: "toggle",
+              key: "autoTransferRemoteImages",
+              disabled: () => !this.plugin.settings.autoUpload,
+            },
+          },
+          {
+            name: t("Attachment format to be uploaded"),
+            desc: t(
+              "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Used by manual uploads, pasted or dropped files, remote image transfers and batch migration; the test upload in settings is not filtered.",
+            ),
+            control: { type: "textarea", key: "uploadFileFormat", rows: 3 },
+          },
+          {
+            name: t("Delete local files after successful upload"),
+            desc: t(
+              "Only delete vault source files after replacing links and checking remaining references.",
+            ),
+            control: { type: "toggle", key: "isDeleteSourceFile" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: t("Skip rules"),
+        items: [
+          {
+            name: t("Remote image URL prefixes to skip"),
+            desc: t("One HTTP(S) URL prefix per line. Applies to manual and automatic transfers."),
+            control: { type: "textarea", key: "remoteImageSkipPrefixes", rows: 4 },
+          },
+        ],
+      },
+    ];
   }
 
-  private addUploadCommandSettings(containerEl: HTMLElement): void {
-    containerEl.createEl("h2", { text: t("Upload tool") });
-    new Setting(containerEl).setName(t("Upload service")).addDropdown((dropdown) =>
-      dropdown
-        .addOptions({ uPic: "uPic", Picsee: "Picsee", custom: t("Custom") })
-        .setValue(this.plugin.settings.uploadService)
-        .onChange(async (value) => {
-          if (!isUploadServiceName(value)) return;
-          this.plugin.settings.uploadService = value;
-          this.plugin.settings.uploadCommand = uploadCommandDict[value];
-          await this.plugin.saveSettings();
-          this.display();
-        }),
-    );
-
-    if (this.plugin.settings.uploadService === "custom") {
-      new Setting(containerEl)
-        .setName(t("Executed command"))
-        .setDesc(t("Upload command instructions"))
-        .addTextArea((textArea) => {
-          textArea.setValue(this.plugin.settings.uploadCommand).onChange(async (value) => {
-            this.plugin.settings.uploadCommand = value;
-            await this.plugin.saveSettings();
-          });
-          textArea.inputEl.setAttribute("rows", "5");
-        });
+  getControlValue(key: string): unknown {
+    const settings = this.plugin.settings;
+    switch (key) {
+      case "uploadFileFormat":
+        return Array.from(settings.uploadFileFormat).join(", ");
+      case "remoteImageSkipPrefixes":
+        return settings.remoteImageSkipPrefixes.join("\n");
+      default:
+        return (settings as unknown as Record<string, unknown>)[key];
     }
+  }
 
-    const details = containerEl.createEl("details");
-    details.createEl("summary", { text: t("Test upload") });
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings;
+    switch (key) {
+      case "uploadService":
+        if (!isUploadServiceName(value)) return;
+        settings.uploadService = value;
+        settings.uploadCommand = uploadCommandDict[value];
+        break;
+      case "uploadCommand":
+        settings.uploadCommand = String(value ?? "");
+        break;
+      case "uploadFileFormat":
+        settings.uploadFileFormat = parseUploadFormats(String(value ?? ""));
+        break;
+      case "remoteImageSkipPrefixes":
+        settings.remoteImageSkipPrefixes = String(value ?? "")
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        break;
+      case "autoUpload":
+        if (typeof value !== "boolean") return;
+        settings.autoUpload = value;
+        break;
+      case "autoTransferRemoteImages":
+        if (typeof value !== "boolean") return;
+        settings.autoTransferRemoteImages = value;
+        break;
+      case "isDeleteSourceFile":
+        if (typeof value !== "boolean") return;
+        settings.isDeleteSourceFile = value;
+        break;
+      default:
+        return;
+    }
+    await this.plugin.saveSettings();
+    // Visibility and disabled predicates depend on these two values.
+    if (key === "uploadService") this.update();
+    else if (key === "autoUpload") this.refreshDomState();
+  }
+
+  private renderTestUpload(setting: Setting): void {
     let testFilePath = "";
-    new Setting(details)
-      .setName(t("Test file path"))
-      .setDesc(t("Testing uploads the selected file to your configured host."))
+    setting
       .addText((text) =>
-        text.onChange((value) => {
+        text.setPlaceholder(t("Test file path")).onChange((value) => {
           testFilePath = value.trim();
         }),
       )
@@ -87,80 +187,5 @@ ${result.url ?? ""}`
           }
         }),
       );
-  }
-
-  private addUploadRulesSettings(containerEl: HTMLElement): void {
-    containerEl.createEl("h2", { text: t("Upload behavior") });
-    const { settings } = this.plugin;
-    const autoSetting = new Setting(containerEl);
-    autoSetting
-      .setName(t("Auto upload"))
-      .setDesc(t("Automatically upload attachments when pasting or dragging files."))
-      .addToggle((toggle) =>
-        toggle.setValue(settings.autoUpload).onChange(async (value) => {
-          settings.autoUpload = value;
-          remoteSetting.setDisabled(!value);
-          await this.plugin.saveSettings();
-        }),
-      );
-    const remoteSetting = new Setting(containerEl)
-      .setName(t("Include remote images"))
-      .setDesc(t("Also transfer HTTP(S) images in pasted Markdown text."))
-      .addToggle((toggle) =>
-        toggle.setValue(settings.autoTransferRemoteImages).onChange(async (value) => {
-          settings.autoTransferRemoteImages = value;
-          await this.plugin.saveSettings();
-        }),
-      )
-      .setDisabled(!settings.autoUpload);
-
-    new Setting(containerEl)
-      .setName(t("Attachment format to be uploaded"))
-      .setDesc(
-        t(
-          "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Used by manual uploads, pasted or dropped files, remote image transfers and batch migration; the test upload in settings is not filtered.",
-        ),
-      )
-      .addTextArea((textArea) => {
-        textArea
-          .setValue(Array.from(settings.uploadFileFormat).join(", "))
-          .onChange(async (value) => {
-            settings.uploadFileFormat = parseUploadFormats(value);
-            await this.plugin.saveSettings();
-          });
-        textArea.inputEl.setAttribute("rows", "3");
-      });
-    new Setting(containerEl)
-      .setName(t("Delete local files after successful upload"))
-      .setDesc(
-        t(
-          "Only delete vault source files after replacing links and checking remaining references.",
-        ),
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(settings.isDeleteSourceFile).onChange(async (value) => {
-          settings.isDeleteSourceFile = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-  }
-
-  private addSkipRulesSettings(containerEl: HTMLElement): void {
-    containerEl.createEl("h2", { text: t("Skip rules") });
-    new Setting(containerEl)
-      .setName(t("Remote image URL prefixes to skip"))
-      .setDesc(t("One HTTP(S) URL prefix per line. Applies to manual and automatic transfers."))
-      .addTextArea((textArea) => {
-        textArea
-          .setValue(this.plugin.settings.remoteImageSkipPrefixes.join("\n"))
-          .onChange(async (value) => {
-            this.plugin.settings.remoteImageSkipPrefixes = value
-              .split(/\r?\n/)
-              .map((line) => line.trim())
-              .filter(Boolean);
-            await this.plugin.saveSettings();
-          });
-        textArea.inputEl.setAttribute("rows", "4");
-      });
   }
 }

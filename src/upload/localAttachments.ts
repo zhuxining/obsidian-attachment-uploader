@@ -123,10 +123,10 @@ export class LocalAttachments {
       )
     )
       return "skipped";
-    const sourceFile = app.vault.getAbstractFileByPath(attachment.inVaultPath);
+    const sourceFile = app.vault.getFileByPath(attachment.inVaultPath);
     const sourcePath = sourceFile?.path;
     let sourceStat: { size: number; mtime: number } | null = null;
-    if (this.isDeleteSourceFile && sourceFile instanceof TFile) {
+    if (this.isDeleteSourceFile && sourceFile) {
       try {
         const stat = await app.vault.adapter.stat(sourceFile.path);
         if (stat?.type === "file") sourceStat = { size: stat.size, mtime: stat.mtime };
@@ -150,7 +150,7 @@ export class LocalAttachments {
         await preserveUploadReceipt(uploadResult.url, attachment.inSystemPath, attachment.basename);
         return "notApplied";
       }
-      if (this.isDeleteSourceFile && sourceFile instanceof TFile && sourceStat) {
+      if (this.isDeleteSourceFile && sourceFile && sourceStat) {
         // Preserve an attachment if any other note may still refer to it.
         const safeToTrash = await this.noRemainingReferences(app, sourceFile);
         if (safeToTrash) {
@@ -159,7 +159,7 @@ export class LocalAttachments {
             if (
               signal?.aborted ||
               sourceFile.path !== sourcePath ||
-              app.vault.getAbstractFileByPath(sourceFile.path) !== sourceFile ||
+              app.vault.getFileByPath(sourceFile.path) !== sourceFile ||
               stat?.type !== "file" ||
               stat.size !== sourceStat.size ||
               stat.mtime !== sourceStat.mtime ||
