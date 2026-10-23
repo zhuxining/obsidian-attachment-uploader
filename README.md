@@ -53,7 +53,7 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
   https://example.com/image.png
   ```
 
-Settings are grouped into **Upload tool**, **Upload options** and **Skip rules**. The command editor appears only for custom tools. Expand **Test upload** to upload a local file and check the result; the test path is not saved.
+Settings are grouped into **Upload tool**, **Upload options** and **Remote images**. The command editor appears only for custom tools. Enter a local file path under **Test upload** to run a real upload and check the result; the test path is not saved.
 
 Editing existing vault attachments does not trigger uploads. Use the manual command to upload modified attachments. Allowed formats may include PDF, audio and other extensions; remote transfer handles images only.
 
