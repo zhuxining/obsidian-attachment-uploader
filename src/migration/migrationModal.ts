@@ -23,7 +23,7 @@ const phaseLabels: Record<MigrationPhase, Parameters<typeof t>[0]> = {
   error: "Migration stopped",
 };
 const reasonLabels: Record<MigrationReason, Parameters<typeof t>[0]> = {
-  "open-note": "Note is open; close it and scan again.",
+  "open-note": "The note was open, so it was skipped. Close it and scan again to migrate it.",
   "note-changed": "Note changed during migration; original content was kept.",
   "note-missing": "Note no longer exists.",
   "source-changed": "A local attachment changed or is unavailable; its link was kept.",
@@ -45,7 +45,7 @@ function resultLine(result: MigrationResult): string {
         ? t("Failed")
         : t("Skipped");
   const reason = result.reason ? ` — ${t(reasonLabels[result.reason])}` : "";
-  return `${result.path}: ${status} (${t("Updated attachments:")} ${result.updated}, ${t("Failed:")} ${result.failed}, ${t("Not applied:")} ${result.notApplied})${reason}`;
+  return `${result.path} · ${status} · ${t("Updated attachments:")} ${result.updated} · ${t("Failed:")} ${result.failed} · ${t("Not applied:")} ${result.notApplied}${reason}`;
 }
 
 /** The panel observes a task; closing it never owns the task's lifetime. */
@@ -72,7 +72,7 @@ export class MigrationModal extends Modal {
       ) {
         new Notice(
           `${t(phaseLabels[phase])}
-${t("Run the batch migration command to view results.")}`,
+${t("Run “Migrate vault attachments” to view the results.")}`,
           10000,
         );
       }
@@ -100,12 +100,12 @@ ${t("Run the batch migration command to view results.")}`,
     contentEl.empty();
     contentEl.createEl("p", {
       text: t(
-        "Scan Markdown notes, review the scope, then upload referenced attachments and update links. Local source files are kept.",
+        "Scans Markdown notes, reviews the scope, then uploads referenced attachments and updates their links. Unreferenced vault files are not uploaded, and local source files are kept.",
       ),
     });
     contentEl.createEl("p", {
       text: t(
-        "Open notes are skipped. Closing this panel keeps the task in memory; quitting Obsidian stops it without saving progress.",
+        "Open notes are skipped. You can close this panel while the task runs; quitting Obsidian stops the task, and progress is not saved.",
       ),
     });
     new Setting(contentEl)
@@ -133,7 +133,7 @@ ${t("Run the batch migration command to view results.")}`,
       !this.disposed &&
       ["running", "paused", "scanning", "cancelling"].includes(this.migration.state.phase)
     ) {
-      new Notice(t("Run the batch migration command to return to this task."), 7000);
+      new Notice(t("Run “Migrate vault attachments” to return to this task."), 7000);
     }
   }
   dispose(): void {
@@ -211,13 +211,13 @@ ${t("Run the batch migration command to view results.")}`,
         { updated: 0, failed: 0, reused: 0, notApplied: 0 },
       );
       contentEl.createEl("p", {
-        text: `${t("Updated attachments:")} ${totals.updated} · ${t("Failed:")} ${totals.failed} · ${t("Reused uploads:")} ${totals.reused} · ${t("Not applied:")} ${totals.notApplied}`,
+        text: `${t("Updated attachments:")} ${totals.updated} · ${t("Failed:")} ${totals.failed} · ${t("Skipped duplicate uploads:")} ${totals.reused} · ${t("Not applied:")} ${totals.notApplied}`,
       });
     }
     new Setting(contentEl)
       .addButton((button) =>
         button
-          .setButtonText(t("Scan vault"))
+          .setButtonText(t("Scan notes"))
           .setDisabled(busy)
           .onClick(async () => {
             await this.migration.scan(normalizeExcludedDirectories(this.excluded));
@@ -251,7 +251,7 @@ ${t("Run the batch migration command to view results.")}`,
       );
     contentEl.createEl("p", {
       text: t(
-        "Items are checked one at a time with a short interval. Upload failures keep the original links. Successful uploads cannot be removed by cancelling the task.",
+        "Attachments are processed one at a time. A failed upload keeps the original link. Cancelling does not remove files that were already uploaded.",
       ),
     });
     if (state.results.length) {

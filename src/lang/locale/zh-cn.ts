@@ -8,7 +8,8 @@ export default {
   "Migration completed": "迁移完成",
   "Migration cancelled": "迁移已取消",
   "Migration stopped": "迁移已停止",
-  "Note is open; close it and scan again.": "笔记处于打开状态，关闭后可重新扫描。",
+  "The note was open, so it was skipped. Close it and scan again to migrate it.":
+    "笔记当时处于打开状态，已跳过。关闭后可重新扫描并迁移。",
   "Note changed during migration; original content was kept.":
     "笔记在迁移期间发生变化，未写入迁移结果。",
   "Note no longer exists.": "笔记已不存在。",
@@ -24,13 +25,13 @@ export default {
   Failed: "失败",
   Skipped: "跳过",
   "Updated attachments:": "已更新附件：",
-  "Reused uploads:": "复用上传结果：",
-  "Run the batch migration command to view results.": "可执行“批量迁移附件”查看结果。",
-  "Run the batch migration command to return to this task.": "可再次执行“批量迁移附件”查看任务。",
-  "Scan Markdown notes, review the scope, then upload referenced attachments and update links. Local source files are kept.":
-    "扫描库内 Markdown 笔记，确认范围后上传引用的本地附件和外链图片，并更新链接。本地源文件保留。",
-  "Open notes are skipped. Closing this panel keeps the task in memory; quitting Obsidian stops it without saving progress.":
-    "打开的笔记会跳过。关闭此窗口后任务仍可运行；退出 Obsidian 会停止任务，且不保存进度。",
+  "Skipped duplicate uploads:": "跳过重复上传：",
+  "Run “Migrate vault attachments” to view the results.": "执行「批量迁移附件」查看结果。",
+  "Run “Migrate vault attachments” to return to this task.": "执行「批量迁移附件」返回任务。",
+  "Scans Markdown notes, reviews the scope, then uploads referenced attachments and updates their links. Unreferenced vault files are not uploaded, and local source files are kept.":
+    "扫描库内 Markdown 笔记，确认范围后上传笔记引用的附件并更新链接。未在笔记中引用的文件不会上传，本地源文件保留。",
+  "Open notes are skipped. You can close this panel while the task runs; quitting Obsidian stops the task, and progress is not saved.":
+    "打开的笔记会跳过。任务运行期间可以关闭此窗口；退出 Obsidian 会停止任务，且不保存进度。",
   "Excluded folders": "排除文件夹",
   "One vault-relative folder per line, for example Templates or Attachments/private. Notes and local files in these folders are skipped.":
     "每行填写一个库内文件夹路径，例如 Templates 或 Attachments/private。跳过其中的笔记及本地附件。",
@@ -46,16 +47,16 @@ export default {
   "Local files: {count}": "本地文件：{count}",
   "Remote images: {count}": "外链图片：{count}",
   "Missing local references: {count}. Their links will be kept.":
-    "有 {count} 处本地附件引用无法定位文件，将保留原链接。",
-  "Notes that could not be scanned: {count}": "扫描失败的笔记：{count}",
+    "{count} 处本地附件找不到文件，将保留原链接。",
+  "Notes that could not be scanned: {count}": "无法扫描的笔记：{count}",
   "Showing the first {count} notes.": "仅显示前 {count} 篇笔记。",
   "Processed notes:": "已处理笔记：",
-  "Scan vault": "扫描知识库",
+  "Scan notes": "扫描笔记",
   "Start migration": "开始迁移",
   Resume: "继续",
   Pause: "暂停",
-  "Items are checked one at a time with a short interval. Upload failures keep the original links. Successful uploads cannot be removed by cancelling the task.":
-    "附件会按顺序处理，上传失败时保留原链接。取消任务不会删除已上传的云端文件。",
+  "Attachments are processed one at a time. A failed upload keeps the original link. Cancelling does not remove files that were already uploaded.":
+    "附件按顺序逐个处理。上传失败时保留原链接；取消任务不会删除已经上传的文件。",
   "Migration results": "迁移结果",
   "Copy results": "复制结果",
   "Migration results copied.": "迁移结果已复制。",
