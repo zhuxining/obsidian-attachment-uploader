@@ -1,7 +1,7 @@
 {
   "id": "attachment-uploader",
   "name": "Attachment Uploader",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "minAppVersion": "1.14.4",
   "description": "Attachment uploader plugin, which allows you customize the upload command, customize upload file type.",
   "author": "zhuxining",

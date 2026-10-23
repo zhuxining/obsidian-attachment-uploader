@@ -74,7 +74,7 @@ const DEFAULT_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_MAX_REDIRECTS = 3;
 const SNIFF_BYTES = 4096;
 const TEMP_PREFIX = "obsidian-attachment-uploader-remote-";
-const USER_AGENT = "Obsidian-Attachment-Uploader/1.4";
+const USER_AGENT = "Obsidian-Attachment-Uploader/1.5";
 
 function tooLarge(): RemoteImageDownloadError {
   return new RemoteImageDownloadError("too-large", "Remote image exceeds the size limit");

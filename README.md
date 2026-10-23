@@ -20,6 +20,7 @@ This Obsidian plugin helps you upload local attachments to cloud storage. You ca
 - If local fallback also fails or a cloud upload succeeds but its link cannot be inserted, a notice shows the recovery location or URL
 - Optional inclusion of remote HTTP(S) images in pasted Markdown, disabled by default
 - Manually transfers remote HTTP(S) images in the current note
+- Batch migration: scan Markdown notes, review the scope, then upload referenced local attachments and remote images; open notes are skipped and local source files are kept
 - Skips uploaded results remembered during this session and optional configured URL prefixes
 
 ## Installation
@@ -62,6 +63,9 @@ Editing existing vault attachments does not trigger uploads. Use the manual comm
 2. Run `Upload attachments in current note` from the command palette, or click the upload Ribbon button
    This command uploads local attachments and transfers remote HTTP(S) images in the current note. Remote images are processed first so newly uploaded local attachments are not transferred again.
 3. Enable both **Auto upload** and **Include remote images** to transfer pasted Markdown images automatically. Rich clipboard content keeps Obsidian’s original paste behaviour
+4. To migrate the whole vault, run `Migrate vault attachments`. Choose **Scan vault**, review the number of notes and attachments, then choose **Start migration**; the task can be paused, resumed or cancelled
+
+Batch migration only processes attachments referenced by Markdown notes and never uploads unreferenced vault files. You can exclude folders. Open notes are skipped; close them and scan again. Items are processed in order with a 200 ms interval. The task pauses after three consecutive failures or when an image server returns a rate-limit response. Before writing, the note content and local attachment state are checked again; anything that cannot be confirmed keeps its original link. Successful uploads that cannot be applied receive recovery records, and local source files are always kept. Closing the migration panel leaves the task running; quitting Obsidian stops it without saving progress.
 
 Remote image transfers use fixed limits: 100 unique URLs per operation, 3 concurrent downloads, 20 MiB per image, 200 MiB per batch, 30 seconds per download and 3 redirects.
 
