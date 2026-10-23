@@ -1,4 +1,67 @@
 export default {
+  "Migrate vault attachments": "批量迁移附件",
+  "Ready to scan": "等待扫描",
+  "Scanning notes...": "正在扫描笔记…",
+  "Review migration": "确认迁移范围",
+  "Migrating attachments...": "正在迁移附件…",
+  "Migration paused": "迁移已暂停",
+  "Migration completed": "迁移完成",
+  "Migration cancelled": "迁移已取消",
+  "Migration stopped": "迁移已停止",
+  "Note is open; close it and scan again.": "笔记处于打开状态，关闭后可重新扫描。",
+  "Note changed during migration; original content was kept.":
+    "笔记在迁移期间发生变化，未写入迁移结果。",
+  "Note no longer exists.": "笔记已不存在。",
+  "A local attachment changed or is unavailable; its link was kept.":
+    "本地附件已变化或无法读取，原链接已保留。",
+  "Could not read or update this note.": "无法读取或更新此笔记。",
+  "An attachment could not be uploaded; its link was kept.": "附件上传失败，原链接已保留。",
+  "This note exceeds the remote image limit; remote links were kept.":
+    "此笔记的外链图片数量超出限制，外链已保留。",
+  "Migration cancelled; remaining links were kept.": "迁移已取消，尚未更新的链接已保留。",
+  "No attachments need to be migrated.": "没有需要迁移的附件。",
+  Updated: "已更新",
+  Failed: "失败",
+  Skipped: "跳过",
+  "Updated attachments:": "已更新附件：",
+  "Reused uploads:": "复用上传结果：",
+  "Run the batch migration command to view results.": "可执行“批量迁移附件”查看结果。",
+  "Run the batch migration command to return to this task.": "可再次执行“批量迁移附件”查看任务。",
+  "Scan Markdown notes, review the scope, then upload referenced attachments and update links. Local source files are kept.":
+    "扫描库内 Markdown 笔记，确认范围后上传引用的本地附件和外链图片，并更新链接。本地源文件保留。",
+  "Open notes are skipped. Closing this panel keeps the task in memory; quitting Obsidian stops it without saving progress.":
+    "打开的笔记会跳过。关闭此窗口后任务仍可运行；退出 Obsidian 会停止任务，且不保存进度。",
+  "Excluded folders": "排除文件夹",
+  "One vault-relative folder per line, for example Templates or Attachments/private. Notes and local files in these folders are skipped.":
+    "每行填写一个库内文件夹路径，例如 Templates 或 Attachments/private。跳过其中的笔记及本地附件。",
+  "Current note:": "当前笔记：",
+  "Current attachment:": "当前附件：",
+  "The image server requested a pause. Review the results before resuming.":
+    "图片服务器返回限流响应，任务已暂停。请稍后查看记录并继续。",
+  "Three consecutive operations failed. Check the upload tool and network before resuming.":
+    "连续三项操作失败，任务已暂停。请检查上传工具和网络后继续。",
+  "Upload settings changed. Scan again before starting a new migration.":
+    "上传配置已变化，请重新扫描后开始迁移。",
+  "Notes to migrate: {count}": "待迁移笔记：{count}",
+  "Local files: {count}": "本地文件：{count}",
+  "Remote images: {count}": "外链图片：{count}",
+  "Missing local references: {count}. Their links will be kept.":
+    "有 {count} 处本地附件引用无法定位文件，将保留原链接。",
+  "Notes that could not be scanned: {count}": "扫描失败的笔记：{count}",
+  "Showing the first {count} notes.": "仅显示前 {count} 篇笔记。",
+  "Processed notes:": "已处理笔记：",
+  "Scan vault": "扫描知识库",
+  "Start migration": "开始迁移",
+  Resume: "继续",
+  Pause: "暂停",
+  "Items are checked one at a time with a short interval. Upload failures keep the original links. Successful uploads cannot be removed by cancelling the task.":
+    "附件会按顺序处理，上传失败时保留原链接。取消任务不会删除已上传的云端文件。",
+  "Migration results": "迁移结果",
+  "Copy results": "复制结果",
+  "Migration results copied.": "迁移结果已复制。",
+  "Could not copy migration results:": "无法复制迁移结果：",
+  "Showing the last {count} results. Copy results to include all entries.":
+    "仅显示最近 {count} 条记录，复制结果可获取全部记录。",
   "Upload current note attachments": "上传当前笔记的附件",
   "Uploading attachments...": "正在处理附件…",
   "Upload cancelled.": "上传已取消。",

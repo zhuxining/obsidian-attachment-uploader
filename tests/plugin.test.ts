@@ -20,6 +20,7 @@ vi.mock("../src/uploadWorkflow", () => ({
   },
 }));
 vi.mock("../src/settingsTab", () => ({ SettingTab: class {} }));
+vi.mock("../src/migration/migrationModal", () => ({ MigrationModal: class {} }));
 vi.mock("../src/lang/helpers", () => ({ t: (key: string) => key }));
 vi.mock("obsidian", () => ({
   editorInfoField: {},
@@ -72,7 +73,10 @@ test("the plugin wires one command, ribbon, paste/drop and cleanup to the workfl
     ribbon(): void;
     cleanups: Array<() => void>;
   };
-  expect(harness.commands.map((command) => command.id)).toEqual(["upload-editor-attachments"]);
+  expect(harness.commands.map((command) => command.id)).toEqual([
+    "upload-editor-attachments",
+    "migrate-vault-attachments",
+  ]);
   await harness.commands[0]!.editorCallback();
   harness.ribbon();
   expect(workflow.uploadCurrentNote).toHaveBeenCalledTimes(2);
