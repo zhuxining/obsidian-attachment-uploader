@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix/harden-upload-and-attachment-safety
   pull_request:
 
 permissions:

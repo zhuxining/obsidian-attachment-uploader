@@ -10,65 +10,38 @@
 
 | 文件            | 说明                                                                                 |
 | --------------- | ------------------------------------------------------------------------------------ |
-| `main.js`       | 构建产物（由 `npm run build` 生成，已被 `.gitignore` 忽略，只随 Release 附件分发）。 |
+| `main.js`       | 构建产物（由 `bun run build` 生成，已被 `.gitignore` 忽略，只随 Release 附件分发）。 |
 | `manifest.json` | 插件元信息，`version` 字段必须与发布的 tag 一致。                                    |
 | `styles.css`    | 插件的样式文件（本仓库存在；若你的插件不带样式可省略）。                             |
-| `versions.json` | 记录每个 `version` 对应的 `minAppVersion`（由 `npm run version` 维护）。             |
+| `versions.json` | 记录每个 `version` 对应的 `minAppVersion`（由 `bun run version` 维护）。             |
 
 ## 工作流（已存在）
 
-工作流位于 `.github/workflows/main.yml`，核心逻辑：
+发布工作流位于 `.github/workflows/main.yml`，推送任意 tag 或手动触发时运行：
 
-```yml
-name: Release Obsidian plugin
+- 使用 `actions/checkout@v7` 检出代码。
+- 使用 `voidzero-dev/setup-vp@v1` 安装 Node.js 26，并缓存包管理器数据。
+- 执行 `vp install` 安装依赖，再执行 `vp run ci`（类型检查 + 构建）。
+- 构建缓存通过 `actions/cache/restore@v6` / `actions/cache/save@v6` 复用。
+- 通过 `gh release create --draft` 创建草稿 Release，上传 `main.js`、`manifest.json`、`styles.css`。
+- 手动触发时可填写 tag；留空则使用 tag 推送或 `manifest.json` 中的版本。
 
-on:
-  push:
-    tags:
-      - "*"
+单独的 `.github/workflows/ci.yml` 在 Pull Request 和推送到 `main` 时执行同一套类型检查、构建和单元测试。
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Build plugin
-        run: |
-          npm install
-          npm run build
-
-      - name: Create release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" \
-            --title="$tag" \
-            --draft \
-            main.js manifest.json styles.css
-```
-
-> 官方模板额外包含 **Generate artifact attestation** 步骤（`actions/attest`），为发布产物生成构建来源签名（build provenance），在提交到社区插件目录时推荐启用。本仓库当前工作流未包含该步骤。若需要，可参照官方文档补上 `attestations: write` 权限与 `actions/attest@v4` 步骤。
+> 官方模板额外包含 **Generate artifact attestation** 步骤（`actions/attest`），为发布产物生成构建来源签名。本仓库当前工作流未包含该步骤；如需启用，可参照官方文档补充 `attestations: write` 权限与 `actions/attest` 步骤。
 
 ## 发布步骤
 
 1. **本地构建并检查类型**（提交前务必通过，避免工作流构建失败）：
 
    ```bash
-   npm run build
+   bun run build
    ```
 
 2. **提升版本号**。修改 `package.json` 中的 `version`，然后执行：
 
    ```bash
-   npm run version
+   bun run version
    ```
 
    该脚本（`version-bump.mjs`）会：
