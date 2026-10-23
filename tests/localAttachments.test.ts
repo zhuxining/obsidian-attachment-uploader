@@ -8,19 +8,34 @@ vi.mock("obsidian", () => ({
 }));
 vi.mock("../src/lang/helpers", () => ({ t: (key: string) => key }));
 
-import { AttachmentMatcher } from "../src/attachmentMatcher";
-import { executeUploadCommand } from "../src/services/command";
-import { preserveUploadReceipt } from "../src/services/uploadReceipts";
-import { UploadService } from "../src/services/uploadService";
+import { formatUploadedFile } from "../src/attachments/imageRewriter";
+import { AttachmentMatcher } from "../src/attachments/vaultAttachments";
+import { LocalAttachments } from "../src/upload/localAttachments";
+import { preserveUploadReceipt } from "../src/upload/recovery";
+import { executeUploadCommand, Uploader } from "../src/upload/uploader";
 
-vi.mock("../src/services/uploadReceipts", () => ({
+vi.mock("../src/upload/recovery", () => ({
   preserveUploadReceipt: vi.fn<typeof preserveUploadReceipt>(),
 }));
 beforeEach(() => vi.mocked(preserveUploadReceipt).mockClear());
 
-vi.mock("../src/services/command", () => ({
+vi.mock("../src/upload/uploader", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/upload/uploader")>()),
   executeUploadCommand: vi.fn<typeof executeUploadCommand>(),
 }));
+
+function createLocalAttachments(
+  command: string,
+  deleteSource: boolean,
+  formats: Set<string>,
+  uploader = new Uploader(executeUploadCommand),
+) {
+  return new LocalAttachments(
+    (path, signal) => uploader.uploadFile(path, { command, signal }),
+    deleteSource,
+    formats,
+  );
+}
 
 function editor(initial: string) {
   let content = initial;
@@ -108,8 +123,8 @@ function deletionFixture() {
     workspace: { getLeavesOfType: () => leaves },
     fileManager: { trashFile },
   } as unknown as App;
-  const service = new UploadService("", true, new Set([".png"]));
-  const upload = vi.spyOn(service, "uploadServe").mockResolvedValue({
+  const service = createLocalAttachments("", true, new Set([".png"]));
+  const upload = vi.spyOn(service, "uploadFile").mockResolvedValue({
     success: true,
     url: "https://cdn.example/a.png",
   });
@@ -247,7 +262,7 @@ describe("conservative source deletion", () => {
   test("read failures preserve the source without rejecting the upload", async () => {
     const context = deletionFixture();
     context.cachedRead.mockRejectedValue(new Error("read failed"));
-    await expect(context.process()).resolves.toBeUndefined();
+    await expect(context.process()).resolves.toBe("succeeded");
     expect(context.trashFile).not.toHaveBeenCalled();
     expect(context.root.editor.getValue()).toContain("https://cdn.example/a.png");
   });
@@ -295,7 +310,7 @@ describe("conservative source deletion", () => {
     const context = deletionFixture();
     if (call === 2) context.stat.mockResolvedValueOnce({ type: "file", size: 10, mtime: 1 });
     context.stat.mockRejectedValueOnce(new Error("stat failed"));
-    await expect(context.process()).resolves.toBeUndefined();
+    await expect(context.process()).resolves.toBe("succeeded");
     expect(context.trashFile).not.toHaveBeenCalled();
   });
 });
@@ -304,8 +319,8 @@ describe("upload and editor replacement", () => {
   test("does not modify a view that switched to another note during upload", async () => {
     const { app, root } = fixture();
     const attachment = new AttachmentMatcher(app).getEditorAttachments(root as never)[0]!;
-    const service = new UploadService("", false, new Set([".png"]));
-    vi.spyOn(service, "uploadServe").mockImplementationOnce(async () => {
+    const service = createLocalAttachments("", false, new Set([".png"]));
+    vi.spyOn(service, "uploadFile").mockImplementationOnce(async () => {
       root.file = { path: "another.md" } as TFile;
       return { success: true, url: "https://cdn.example/a.png" };
     });
@@ -327,7 +342,7 @@ describe("upload and editor replacement", () => {
         });
       return { success: true, url: "https://cdn.example/a.png" };
     });
-    await expect(context.process()).resolves.toBeUndefined();
+    await expect(context.process()).resolves.toBe("notApplied");
     expect(preserveUploadReceipt).toHaveBeenCalledExactlyOnceWith(
       "https://cdn.example/a.png",
       "/vault/assets/a.png",
@@ -343,24 +358,23 @@ describe("upload and editor replacement", () => {
           finish = resolve;
         }),
     );
-    const tasks = new Map();
-    const first = new UploadService("uploader %s", false, new Set(), tasks);
-    const second = new UploadService("uploader %s", false, new Set(), tasks);
-    const one = first.uploadServe("/vault/a.png");
-    const two = second.uploadServe("/vault/a.png");
+    const uploader = new Uploader(executeUploadCommand);
+    const first = createLocalAttachments("uploader %s", false, new Set(), uploader);
+    const second = createLocalAttachments("uploader %s", false, new Set(), uploader);
+    const one = first.uploadFile("/vault/a.png");
+    const two = second.uploadFile("/vault/a.png");
     expect(executeUploadCommand).toHaveBeenCalledTimes(1);
     finish("https://cdn.example/a.png");
     expect(await one).toEqual(await two);
-    expect(tasks.size).toBe(0);
   });
 
   test("uploads one file and rewrites its variants without changing code examples", async () => {
     const { app, root } = fixture();
     const source = "![[assets/a.png]]";
     root.editor.setValue(`\`${source}\`\n${source}\n![](assets/a.png)`);
-    const service = new UploadService("", false, new Set([".png"]));
+    const service = createLocalAttachments("", false, new Set([".png"]));
     const upload = vi
-      .spyOn(service, "uploadServe")
+      .spyOn(service, "uploadFile")
       .mockResolvedValue({ success: true, url: "https://cdn.example/a.png" });
     const attachments = new AttachmentMatcher(app).getEditorAttachments(root as never);
     for (const attachment of attachments) await service.processAttachment(attachment, root, app);
@@ -371,8 +385,7 @@ describe("upload and editor replacement", () => {
   });
 
   test("escapes filename characters that would break Markdown labels", () => {
-    const service = new UploadService("", false, new Set([".png"]));
-    expect(service.formatUploadedFile("a[b].png", "https://cdn.example/a.png")).toBe(
+    expect(formatUploadedFile("a[b].png", "https://cdn.example/a.png")).toBe(
       "![a\\[b\\].png](https://cdn.example/a.png)",
     );
   });
@@ -380,50 +393,31 @@ describe("upload and editor replacement", () => {
   test("manual upload preserves image embedding through the matcher pipeline", async () => {
     const { app, root } = fixture();
     const attachment = new AttachmentMatcher(app).getEditorAttachments(root as never)[0]!;
-    const service = new UploadService("", false, new Set([".png"]));
-    vi.spyOn(service, "uploadServe").mockResolvedValue({
+    const service = createLocalAttachments("", false, new Set([".png"]));
+    vi.spyOn(service, "uploadFile").mockResolvedValue({
       success: true,
       url: "https://cdn.example/a.png",
     });
     await service.processAttachment(attachment, root, app);
     expect(root.editor.getValue()).toBe("![a.png](https://cdn.example/a.png)");
   });
-
-  test("auto replacement respects each note's resolved attachment identity", async () => {
-    const { app, files, root, nested } = fixture();
-    const service = new UploadService("", false, new Set([".png"]));
-    const count = await service.replaceLocalLinksInAllEditors(
-      app,
-      files[0] as TFile,
-      "https://cdn.example/root.png",
-    );
-    expect(count).toBe(1);
-    expect(root.editor.getValue()).toBe("![a.png](https://cdn.example/root.png)");
-    expect(nested.editor.getValue()).toBe("![](assets/a.png)");
-  });
-
-  test("leaves unresolved references untouched even when the basename exists", async () => {
-    const { app, files, root } = fixture();
-    root.editor.setValue("![](missing/a.png)");
-    const service = new UploadService("", false, new Set([".png"]));
-    expect(
-      await service.replaceLocalLinksInAllEditors(
-        app,
-        files[0] as TFile,
-        "https://cdn.example/a.png",
-      ),
-    ).toBe(0);
-    expect(root.editor.getValue()).toBe("![](missing/a.png)");
-  });
 });
 
-test("reports successful command results for prefix suggestions", async () => {
-  vi.mocked(executeUploadCommand).mockResolvedValueOnce("Output URL: https://cdn.example/a.png");
-  const onSuccess = vi.fn<(url: string) => void>();
-  const service = new UploadService("uploader %s", false, new Set(), new Map(), onSuccess);
-  await expect(service.uploadServe("/vault/a.png")).resolves.toEqual({
-    success: true,
-    url: "https://cdn.example/a.png",
+test("cancelling an already-running local upload preserves the cloud result without replacing or deleting", async () => {
+  const { app, root } = fixture();
+  const attachment = new AttachmentMatcher(app).getEditorAttachments(root)[0]!;
+  const controller = new AbortController();
+  const service = createLocalAttachments("uploader %s", true, new Set([".png"]));
+  vi.spyOn(service, "uploadFile").mockImplementation(async () => {
+    controller.abort();
+    return { success: true, url: "https://cdn.example/new.png" };
   });
-  expect(onSuccess).toHaveBeenCalledExactlyOnceWith("https://cdn.example/a.png");
+  const status = await service.processAttachment(attachment, root, app, controller.signal);
+  expect(status).toBe("notApplied");
+  expect(root.editor.getValue()).toBe("![[assets/a.png]]");
+  expect(preserveUploadReceipt).toHaveBeenCalledExactlyOnceWith(
+    "https://cdn.example/new.png",
+    attachment.inSystemPath,
+    attachment.basename,
+  );
 });

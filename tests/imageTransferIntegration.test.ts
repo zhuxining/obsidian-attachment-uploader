@@ -8,12 +8,9 @@ vi.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
 }));
 
-import {
-  ImageTransferService,
-  type TransferDocumentAccess,
-} from "../src/services/imageTransferService";
-import { RemoteImageDownloader } from "../src/services/remoteImageDownloader";
-import { applyTextChanges, type TextChange } from "../src/services/remoteImageRewriter";
+import { applyTextChanges, type TextChange } from "../src/attachments/imageRewriter";
+import { RemoteImageDownloader } from "../src/upload/imageDownloader";
+import { ImageTransferService, type TransferDocumentAccess } from "../src/upload/remoteImages";
 
 const PNG = Buffer.concat([
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -58,7 +55,6 @@ test("downloads, uploads and rewrites duplicate references end to end", async ()
     const summary = await service.transfer({
       sourcePath: "note.md",
       scope: { kind: "note" },
-      mode: "normal",
       settings: { uploadFileFormat: new Set([".png"]), prefixes: [] },
       signal: new AbortController().signal,
     });
@@ -116,7 +112,6 @@ test("keeps the original link when the server returns an HTML page", async () =>
     const summary = await service.transfer({
       sourcePath: "note.md",
       scope: { kind: "note" },
-      mode: "normal",
       settings: { uploadFileFormat: new Set([".png"]), prefixes: [] },
       signal: new AbortController().signal,
     });

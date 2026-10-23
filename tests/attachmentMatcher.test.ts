@@ -4,7 +4,7 @@ vi.mock("obsidian", () => ({
   normalizePath: (path: string) => path.replace(/\\\\/g, "/"),
 }));
 
-import { AttachmentMatcher } from "../src/attachmentMatcher";
+import { AttachmentMatcher } from "../src/attachments/vaultAttachments";
 
 function createMatcher(paths: string[], resolved?: string) {
   const files = paths.map((path) => {

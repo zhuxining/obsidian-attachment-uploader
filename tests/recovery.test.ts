@@ -12,7 +12,7 @@ vi.mock("node:os", async (importOriginal) => {
 vi.mock("obsidian", () => ({ Notice: vi.fn<(message: string, timeout?: number) => void>() }));
 vi.mock("../src/lang/helpers", () => ({ t: (key: string) => key }));
 
-import { preserveUploadReceipt, UPLOAD_RECEIPT_KEYS } from "../src/services/uploadReceipts";
+import { preserveUploadReceipt, UPLOAD_RECEIPT_KEYS } from "../src/upload/recovery";
 
 test("persists distinct private receipts with complete recovery fields and persistent notices", async () => {
   const home = await mkdtemp(join(tmpdir(), "upload-receipt-test-"));

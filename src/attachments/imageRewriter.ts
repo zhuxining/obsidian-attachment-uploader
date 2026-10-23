@@ -1,9 +1,4 @@
-import type {
-  ImageDefinitionToken,
-  RemoteImageDocument,
-  RemoteImageReference,
-} from "../attachmentMatcher";
-import { toMarkdownUrl } from "./url";
+import type { ImageDefinitionToken, RemoteImageDocument, RemoteImageReference } from "./markdown";
 
 export interface TextChange {
   start: number;
@@ -14,10 +9,6 @@ export interface TextChange {
 export interface RemoteImageReplacementPlan {
   changes: TextChange[];
   appliedUrls: Set<string>;
-}
-
-export interface ReplacementOptions {
-  definitionIdPrefix?: string;
 }
 
 /** Apply UTF-16 offset changes; ranges are relative to the unmodified content. */
@@ -70,7 +61,6 @@ export function buildRemoteImageReplacements(
   document: RemoteImageDocument,
   replacements: ReadonlyMap<string, string>,
   inScope: (start: number, end: number) => boolean,
-  _options: ReplacementOptions = {},
 ): RemoteImageReplacementPlan | null {
   const changes: TextChange[] = [];
   const appliedUrls = new Set<string>();
@@ -122,16 +112,17 @@ export function buildRemoteImageReplacements(
 
     const label = content.slice(reference.start, reference.referenceStart ?? reference.end);
     // Serialize the parsed title so blockquote/list prefixes cannot enter the image.
-    const title = definition.title === null
-      ? ""
-      : ` "${definition.title
-          .replace(/&/g, "&amp;")
-          .replace(/\\/g, "&#92;")
-          .replace(/"/g, "&quot;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/\r/g, "&#13;")
-          .replace(/\n/g, "&#10;")}"`;
+    const title =
+      definition.title === null
+        ? ""
+        : ` "${definition.title
+            .replace(/&/g, "&amp;")
+            .replace(/\\/g, "&#92;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\r/g, "&#13;")
+            .replace(/\n/g, "&#10;")}"`;
     changes.push({
       start: reference.start,
       end: reference.end,
@@ -148,4 +139,33 @@ export function buildRemoteImageReplacements(
     previousEnd = Math.max(previousEnd, change.end);
   }
   return { changes: sorted, appliedUrls };
+}
+
+/**
+ * 生成 Markdown 链接可用的 URL。
+ * uPic 等工具会把上传得到的 URL 再做一次百分号编码（如把 %E6 编成 %25E6），
+ * 产生 %25 这种二次编码，直接访问会 404。因此要逐层解码直到不再出现 %25
+ * （过度编码的标志），即可得到正确的单次编码 URL——此时绝不可再 encodeURI，
+ * 否则 % 会被重新编回 %25。仅当 URL 完全未编码（不含任何 %）时，才补一次
+ * encodeURI 把中文/空格等归一化为合法 URL。
+ * 括号在 Markdown 裸链接里会提前截断，因此含括号时用尖括号 <...> 包裹。
+ */
+export function toMarkdownUrl(url: string): string {
+  let value = url.trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = value.replace(/%25(?=[0-9a-f]{2})/gi, "%");
+    if (next === value) break;
+    value = next;
+  }
+  // Preserve existing %XX sequences when encoding remaining Unicode/whitespace.
+  value = encodeURI(value).replace(/%25([0-9a-f]{2})/gi, "%$1");
+  return /[()]/.test(value) ? `<${value}>` : value;
+}
+
+const IMAGE_EXTENSION_REGEX = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i;
+
+export function formatUploadedFile(filename: string, url: string): string {
+  const target = toMarkdownUrl(url);
+  const label = filename.replace(/[\\[\]]/g, "\\$&");
+  return IMAGE_EXTENSION_REGEX.test(filename) ? `![${label}](${target})` : `[${label}](${target})`;
 }

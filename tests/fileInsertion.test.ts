@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promise
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { Notice, TFile } from "obsidian";
+import { Notice } from "obsidian";
 import type { App, Editor } from "obsidian";
 import { expect, test, vi } from "vite-plus/test";
 
@@ -18,34 +18,32 @@ vi.mock("obsidian", () => ({
 vi.mock("../src/lang/helpers", () => ({ t: (key: string) => key }));
 vi.mock("../src/settingsTab", () => ({ SettingTab: class {} }));
 
-import AttachmentUploader from "../src/main";
-import * as uploadReceipts from "../src/services/uploadReceipts";
+import { FileInsertion } from "../src/fileInsertion";
+import * as uploadReceipts from "../src/upload/recovery";
 
 test("does not handle an event already claimed by another plugin", async () => {
-  const plugin = new AttachmentUploader({} as never, {} as never);
+  const plugin = new FileInsertion(
+    {} as never,
+    () => new Set([".png"]),
+    async () => ({ success: false }),
+  );
   const event = new Event("paste", { cancelable: true });
   event.preventDefault();
   const replaceSelection = vi.fn<Editor["replaceSelection"]>();
   await (
     plugin as unknown as {
-      handleFileInsertion: (
-        event: Event,
-        files: File[],
-        editor: Editor,
-        sourcePath: string,
-      ) => Promise<void>;
+      handle: (event: Event, files: File[], editor: Editor, sourcePath: string) => Promise<void>;
     }
-  ).handleFileInsertion(
-    event,
-    [new File([], "one.png")],
-    { replaceSelection } as unknown as Editor,
-    "note.md",
-  );
+  ).handle(event, [new File([], "one.png")], { replaceSelection } as unknown as Editor, "note.md");
   expect(replaceSelection).not.toHaveBeenCalled();
 });
 
 test("updates the source file atomically after its editor has closed", async () => {
-  const plugin = new AttachmentUploader({} as never, {} as never);
+  const plugin = new FileInsertion(
+    {} as never,
+    () => new Set([".png"]),
+    async () => ({ success: false }),
+  );
   const marker = "<!-- attachment-uploader:test -->";
   let saved = `before ${marker} after`;
   const source = { path: "source.md" };
@@ -77,26 +75,20 @@ test("updates the source file atomically after its editor has closed", async () 
 });
 
 test("reserves all batch positions before uploading any file", async () => {
-  const plugin = new AttachmentUploader({} as never, {} as never);
-  plugin.settings = {
-    uploadCommand: "",
-    isDeleteSourceFile: false,
-    uploadFileFormat: new Set([".png"]),
-  } as never;
+  const plugin = new FileInsertion(
+    {} as never,
+    () => new Set([".png"]),
+    async () => ({ success: false }),
+  );
   const replaceSelection = vi.fn<Editor["replaceSelection"]>();
   const editor = { replaceSelection } as unknown as Editor;
   const internals = plugin as unknown as {
-    handleFileInsertion: (
-      event: Event,
-      files: File[],
-      editor: Editor,
-      sourcePath: string,
-    ) => Promise<void>;
-    uploadAndInsert: (...args: unknown[]) => Promise<void>;
+    handle: (event: Event, files: File[], editor: Editor, sourcePath: string) => Promise<void>;
+    insert: (...args: unknown[]) => Promise<void>;
   };
   let release!: () => void;
   const upload = vi
-    .spyOn(internals, "uploadAndInsert")
+    .spyOn(internals, "insert")
     .mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
@@ -105,7 +97,7 @@ test("reserves all batch positions before uploading any file", async () => {
     )
     .mockResolvedValueOnce(undefined);
   const event = new Event("drop", { cancelable: true });
-  const operation = internals.handleFileInsertion(
+  const operation = internals.handle(
     event,
     [new File([], "one.png"), new File([], "two.png")],
     editor,
@@ -122,24 +114,18 @@ test("reserves all batch positions before uploading any file", async () => {
 });
 
 test("leaves mixed-format batches to Obsidian without intercepting the event", async () => {
-  const plugin = new AttachmentUploader({} as never, {} as never);
-  plugin.settings = {
-    uploadCommand: "",
-    isDeleteSourceFile: false,
-    uploadFileFormat: new Set([".png"]),
-  } as never;
+  const plugin = new FileInsertion(
+    {} as never,
+    () => new Set([".png"]),
+    async () => ({ success: false }),
+  );
   const replaceSelection = vi.fn<Editor["replaceSelection"]>();
   const event = new Event("drop", { cancelable: true });
   await (
     plugin as unknown as {
-      handleFileInsertion: (
-        event: Event,
-        files: File[],
-        editor: Editor,
-        sourcePath: string,
-      ) => Promise<void>;
+      handle: (event: Event, files: File[], editor: Editor, sourcePath: string) => Promise<void>;
     }
-  ).handleFileInsertion(
+  ).handle(
     event,
     [new File([], "one.png"), new File([], "notes.txt")],
     { replaceSelection } as unknown as Editor,
@@ -150,7 +136,11 @@ test("leaves mixed-format batches to Obsidian without intercepting the event", a
 });
 
 test("failed paste uses its source note after the active note changes", async () => {
-  const plugin = new AttachmentUploader({} as never, {} as never);
+  const plugin = new FileInsertion(
+    {} as never,
+    () => new Set([".png"]),
+    async () => ({ success: false }),
+  );
   let activePath = "A/note.md";
   let content = "";
   const editor = {
@@ -189,14 +179,14 @@ test("failed paste uses its source note after the active note changes", async ()
         finishUpload = resolve;
       }),
   );
-  vi.spyOn(plugin, "uploadService", "get").mockReturnValue({ uploadServe } as never);
+  vi.spyOn(plugin, "uploadFile").mockImplementation(uploadServe);
   const file = new File(["image bytes"], "image.png");
   // Exercise the complete async operation, including temp-file creation and cleanup.
   const operation = (
     plugin as unknown as {
-      uploadAndInsert: (file: File, editor: Editor, sourcePath: string) => Promise<void>;
+      insert: (file: File, editor: Editor, sourcePath: string) => Promise<void>;
     }
-  ).uploadAndInsert(file, editor, "A/note.md");
+  ).insert(file, editor, "A/note.md");
   await vi.waitFor(() => expect(uploadServe).toHaveBeenCalledOnce());
   activePath = "B/note.md";
   finishUpload({ success: false, errorMessage: "offline" });
@@ -213,7 +203,7 @@ async function withRecoveryFixture(
   run: (fixture: {
     home: string;
     bytes: Buffer;
-    plugin: AttachmentUploader;
+    plugin: FileInsertion;
     uploadServe: ReturnType<
       typeof vi.fn<(path: string) => Promise<{ success: boolean; url?: string }>>
     >;
@@ -222,15 +212,16 @@ async function withRecoveryFixture(
 ) {
   const home = await mkdtemp(join(tmpdir(), "attachment-recovery-test-"));
   const bytes = Buffer.from([0, 1, 127, 128, 255]);
-  const plugin = new AttachmentUploader({} as never, {} as never);
+  const plugin = new FileInsertion(
+    {} as never,
+    () => new Set([".png"]),
+    async () => ({ success: false }),
+  );
   const uploadServe = vi.fn<(path: string) => Promise<{ success: boolean; url?: string }>>();
   uploadServe.mockResolvedValue({ success: false });
-  const uploadService = vi.spyOn(plugin, "uploadService", "get").mockReturnValue({
-    uploadServe,
-    formatUploadedFile: () => "![image](https://cdn.example/a.png)",
-  } as never);
+  const uploadService = vi.spyOn(plugin, "uploadFile").mockImplementation(uploadServe);
   const internals = plugin as unknown as {
-    uploadAndInsert: (file: File, editor: Editor, sourcePath: string) => Promise<void>;
+    insert: (file: File, editor: Editor, sourcePath: string) => Promise<void>;
   };
   vi.mocked(homedir).mockReturnValue(home);
   vi.mocked(Notice).mockClear();
@@ -241,7 +232,7 @@ async function withRecoveryFixture(
       plugin,
       uploadServe,
       insert: () =>
-        internals.uploadAndInsert(
+        internals.insert(
           new File([bytes], "image.png"),
           {
             replaceSelection: vi.fn<Editor["replaceSelection"]>(),
@@ -341,46 +332,6 @@ test.each(["removed", "exception", "switched"])(
         replacement?.mockRestore();
       }
     });
-  },
-);
-
-test.each(["zero", "exception"])(
-  "preserves automatic upload results after %s replacements",
-  async (failure) => {
-    const plugin = new AttachmentUploader({} as never, {} as never);
-    plugin.settings = { autoUploadOnSave: true } as never;
-    const file = Object.assign(new TFile(), { path: "assets/a.png", name: "a.png" });
-    const replaceLocalLinksInAllEditors = vi.fn<() => Promise<number>>();
-    if (failure === "exception")
-      replaceLocalLinksInAllEditors.mockRejectedValue(new Error("editor failed"));
-    else replaceLocalLinksInAllEditors.mockResolvedValue(0);
-    const service = vi.spyOn(plugin, "uploadService", "get").mockReturnValue({
-      isUploadableFile: () => true,
-      uploadServe: async () => ({ success: true, url: "https://cdn.example/a.png" }),
-      replaceLocalLinksInAllEditors,
-    } as never);
-    const receipt = vi.spyOn(uploadReceipts, "preserveUploadReceipt").mockResolvedValue(undefined);
-    plugin.app = {
-      vault: { adapter: { getBasePath: () => "/vault" } },
-      workspace: { getLeavesOfType: () => [{ view: { file: { path: "note.md" } } }] },
-      metadataCache: {
-        getFileCache: () => ({ embeds: [{ link: "assets/a.png" }] }),
-        getFirstLinkpathDest: () => file,
-      },
-    } as unknown as App;
-    try {
-      await (
-        plugin as unknown as { handleAutoUploadOnSave: (file: TFile) => Promise<void> }
-      ).handleAutoUploadOnSave(file);
-      expect(receipt).toHaveBeenCalledExactlyOnceWith(
-        "https://cdn.example/a.png",
-        "/vault/assets/a.png",
-        "a.png",
-      );
-    } finally {
-      receipt.mockRestore();
-      service.mockRestore();
-    }
   },
 );
 

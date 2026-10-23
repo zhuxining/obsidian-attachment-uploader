@@ -1,113 +1,63 @@
 export default {
-  "Attachment recovery copy saved:": "Attachment recovery copy saved:",
+  "Upload current note attachments": "Upload attachments in current note",
+  "Uploading attachments...": "Processing attachments...",
+  "Upload cancelled.": "Upload cancelled.",
+  "Uploaded:": "Uploaded:",
+  "Upload tool": "Upload tool",
+  Custom: "Custom",
+  "Upload command instructions":
+    "Include one standalone %s argument for the file path. The command must return one HTTP(S) URL in standard output.",
+  "Test upload": "Upload test",
+  "Testing uploads the selected file to your configured host.":
+    "This test uploads the specified file.",
+  "Upload behavior": "Upload options",
+  "Automatically upload attachments when pasting or dragging files.":
+    "Upload pasted screenshots and pasted or dropped files, then insert their links.",
+  "Include remote images": "Include remote images",
+  "Also transfer HTTP(S) images in pasted Markdown text.":
+    "When auto upload is enabled, also upload remote images in pasted Markdown and replace their links.",
+  "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.":
+    "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Applies to manual and automatic uploads.",
+  "Only delete vault source files after replacing links and checking remaining references.":
+    "Delete the original vault file after updating its links. Keep it if references remain or cannot be checked.",
+  "Skip rules": "Remote images",
+  "One HTTP(S) URL prefix per line. Applies to manual and automatic transfers.":
+    "One HTTP(S) URL prefix per line, e.g. https://example.com/images/. Matching images are skipped in manual and automatic transfers.",
+  "Attachment recovery copy saved:": "Attachment saved to:",
   "Attachment recovery failed; temporary copy retained:":
-    "Attachment recovery failed; temporary copy retained:",
+    "Could not save the attachment. Check the temporary file location:",
   Unavailable: "Unavailable",
-  "Upload attachments": "Upload attachments",
-  "No local attachment matching the upload conditions was found.":
-    "No local attachment matching the upload conditions was found.",
-  "attachments that matched the upload conditions \n Start uploading and replacing...":
-    "attachments that matched the upload conditions \n Start uploading and replacing...",
-  "Uploaded attachment:": "Uploaded attachment:",
-  "Replace with:": "Replace with:",
-  "Local attachment deleted": "Local attachment deleted",
-  "Upload failed:": "Upload failed:",
-  "Error message:": "Error message:",
-  "Upload command": "Upload command",
-  "Upload service": "Upload service",
-  "Executed command": "Executed command",
-  "The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md":
-    "Commands execute without a shell. The %s placeholder must occur exactly once as a separate argument. The executable must print the upload URL to stdout.",
-  "Test file path": "Test file path",
-  "Upload test": "Upload test",
-  "Enter the test file path": "Enter the test file path",
+  "No attachment matching the upload conditions was found.": "No attachments to upload.",
+  "Upload service": "Tool",
+  "Executed command": "Upload command",
+  "Test file path": "Local file path",
+  "Upload test": "Run test",
+  "Enter the test file path": "Enter the full path to a local file.",
   "Upload successful": "Upload successful",
   "Upload failed": "Upload failed",
-  "Upload rules": "Upload rules",
-  "Attachment format to be uploaded": "Attachment format to be uploaded",
-  "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.":
-    "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.",
-  "Delete local files after successful upload": "Delete local files after successful upload",
+  "Attachment format to be uploaded": "Allowed file types",
+  "Delete local files after successful upload": "Delete local attachments after upload",
   "Upload succeeded but was not applied. Recovery receipt:":
-    "Upload succeeded but was not applied. Recovery receipt:",
+    "Upload succeeded, but the note links could not be updated. Upload details saved to:",
   "Upload succeeded but recovery receipt could not be saved. URL:":
-    "Upload succeeded but recovery receipt could not be saved. URL:",
-  "Auto uploaded:": "Auto uploaded:",
+    "Upload succeeded, but the note links and upload record could not be saved. Keep this URL:",
   "Auto upload": "Auto upload",
-  "When enabled, files will be automatically uploaded and replaced when pasting or dragging":
-    "When enabled, modified local attachments referenced in open notes can upload automatically",
-  "Transfer remote images in current note": "Transfer remote images in current note",
-  "Transfer remote images in selection": "Transfer remote images in selection",
-  "Transfer this image": "Transfer this image",
-  "Force re-upload this image": "Force re-upload this image",
-  "This operation needs an open Markdown note.": "This operation needs an open Markdown note.",
-  "No selection.": "No selection.",
-  "No remote image was found.": "No remote image was found.",
-  "Remote image transfer failed:": "Remote image transfer failed:",
-  "Transferring remote images...": "Transferring remote images...",
+  "Remote image transfer failed:": "Could not transfer remote images:",
   Cancel: "Cancel",
+  "Cancelling...": "Cancelling...",
   Downloading: "Downloading",
   Uploading: "Uploading",
-  Applying: "Applying",
-  "Too many remote images to transfer in one operation.":
-    "Too many remote images to transfer in one operation.",
-  "Maximum unique image URLs per operation": "Maximum unique image URLs per operation",
-  "Concurrent image downloads": "Concurrent image downloads",
-  "Maximum image size (MiB)": "Maximum image size (MiB)",
-  "Maximum batch size (MiB)": "Maximum batch size (MiB)",
-  "Image download timeout (seconds)": "Image download timeout (seconds)",
-  "Maximum image redirects": "Maximum image redirects",
-  "Default:": "Default:",
-  "Use a non-negative integer. Zero disables redirects.":
-    "Use a non-negative integer. Zero disables redirects.",
-  "Use a positive integer.": "Use a positive integer.",
-  "Enter an integer in this range:": "Enter an integer in this range:",
-  "Transferred:": "Transferred:",
+  Applying: "Updating links",
+  "A maximum of {limit} remote image URLs can be transferred at once.":
+    "A maximum of {limit} remote image URLs can be transferred at once.",
   "Failed:": "Failed:",
   "Skipped:": "Skipped:",
-  "Not applied:": "Not applied:",
-  "Remote image transfer cancelled.": "Remote image transfer cancelled.",
-  "pasted remote images can be transferred": "pasted remote images can be transferred",
-  "Transfer now": "Transfer now",
-  "Remote images": "Remote images",
-  "Remote image paste policy": "Remote image paste policy",
-  "Choose whether pasted Markdown text with remote images is transferred automatically.":
-    "Choose whether pasted Markdown text with remote images is transferred automatically.",
-  Off: "Off",
-  Ask: "Ask",
-  Auto: "Auto",
-  "Automatically detect the current image host": "Automatically detect the current image host",
-  "Only the current default uPic host's public URL prefix is read. Configuration secrets are never read or shown.":
-    "Only the current default uPic host's public URL prefix is read. Configuration secrets are never read or shown.",
-  "Remote image URL prefixes to skip": "Remote image URL prefixes to skip",
-  "One HTTP(S) URL prefix per line. Matching compares protocol, host, port and path directory.":
-    "One HTTP(S) URL prefix per line. Matching compares protocol, host, port and path directory.",
-  "Insert suggested prefix": "Insert suggested prefix",
-  "No successful upload URL is available for a suggestion.":
-    "No successful upload URL is available for a suggestion.",
-  "Detected host prefixes": "Detected host prefixes",
-  "No automatic detection result is stored.": "No automatic detection result is stored.",
-  "Detect current host": "Detect current host",
-  "Clear detection": "Clear detection",
-  "Automatic host detection failed:": "Automatic host detection failed:",
-  "Automatic detection is only available on macOS.":
-    "Automatic detection is only available on macOS.",
-  "The upload service is not uPic.": "The upload service is not uPic.",
-  "The uPic application could not be located.": "The uPic application could not be located.",
-  "This uPic version is not supported for automatic detection.":
-    "This uPic version is not supported for automatic detection.",
-  "uPic preferences could not be read.": "uPic preferences could not be read.",
-  "No default uPic host is configured.": "No default uPic host is configured.",
-  "The default uPic host has no public domain.": "The default uPic host has no public domain.",
-  "The uPic configuration structure is not supported.":
-    "The uPic configuration structure is not supported.",
-  "The detected domain is too broad for a shared host.":
-    "The detected domain is too broad for a shared host.",
-  "The current image host could not be detected. Configure prefixes manually to skip images already on your own host.":
-    "The current image host could not be detected. Configure prefixes manually to skip images already on your own host.",
-  "Session upload records": "Session upload records",
-  "After switching hosts inside Picsee or a custom uploader, clear remembered URLs. Manual prefixes are kept.":
-    "After switching hosts inside Picsee or a custom uploader, clear remembered URLs. Manual prefixes are kept.",
-  "Clear session records": "Clear session records",
-  "Session upload records cleared.": "Session upload records cleared.",
+  "Not applied:": "Links not updated:",
+  "Remote image URL prefixes to skip": "Skip URL prefixes",
+  "Upload failed:": "Upload failed:",
+  "Unknown error": "Unknown error",
+  "Could not remove temporary files:": "Could not remove temporary files:",
+  "Attachment saved, but its link could not be inserted:":
+    "Attachment saved, but its link could not be inserted:",
+  "Could not save the attachment to the vault:": "Could not save the attachment to the vault:",
 };

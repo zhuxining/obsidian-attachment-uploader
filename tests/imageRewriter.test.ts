@@ -1,15 +1,7 @@
 import { expect, test } from "vite-plus/test";
-import { vi } from "vite-plus/test";
 
-vi.mock("obsidian", () => ({
-  normalizePath: (path: string) => path,
-}));
-
-import { collectRemoteImageReferences } from "../src/attachmentMatcher";
-import {
-  applyTextChanges,
-  buildRemoteImageReplacements,
-} from "../src/services/remoteImageRewriter";
+import { applyTextChanges, buildRemoteImageReplacements } from "../src/attachments/imageRewriter";
+import { collectRemoteImageReferences } from "../src/attachments/markdown";
 
 function rewrite(content: string, replacements: Record<string, string>, all = true) {
   const document = collectRemoteImageReferences(content);
@@ -54,12 +46,14 @@ test("inlines the image when an ordinary link shares its definition", () => {
     "",
   ].join("\n");
   const result = rewrite(content, { "https://cdn.example/a.png": "https://cdn.example/b.png" });
-  expect(result.content).toBe([
-    '![a](https://cdn.example/b.png "Title") [download][photo]',
-    "",
-    '[photo]: <https://cdn.example/a.png> "Title"',
-    "",
-  ].join("\n"));
+  expect(result.content).toBe(
+    [
+      '![a](https://cdn.example/b.png "Title") [download][photo]',
+      "",
+      '[photo]: <https://cdn.example/a.png> "Title"',
+      "",
+    ].join("\n"),
+  );
 });
 
 test("inlines collapsed and shortcut images while preserving the shared definition", () => {
@@ -70,12 +64,14 @@ test("inlines collapsed and shortcut images while preserving the shared definiti
     "",
   ].join("\n");
   const result = rewrite(content, { "https://cdn.example/a.png": "https://cdn.example/b.png" });
-  expect(result.content).toBe([
-    "![photo](https://cdn.example/b.png) and ![photo](https://cdn.example/b.png) plus [link][photo]",
-    "",
-    "[photo]: https://cdn.example/a.png",
-    "",
-  ].join("\n"));
+  expect(result.content).toBe(
+    [
+      "![photo](https://cdn.example/b.png) and ![photo](https://cdn.example/b.png) plus [link][photo]",
+      "",
+      "[photo]: https://cdn.example/a.png",
+      "",
+    ].join("\n"),
+  );
 });
 
 test("only rewrites the selection and leaves out-of-scope images untouched", () => {
@@ -97,14 +93,16 @@ test("only rewrites the selection and leaves out-of-scope images untouched", () 
   );
   expect(plan).not.toBeNull();
   const updated = applyTextChanges(content, plan!.changes);
-  expect(updated).toBe([
-    "![one][photo]",
-    "",
-    "![two](https://cdn.example/b.png)",
-    "",
-    "[photo]: https://cdn.example/a.png",
-    "",
-  ].join("\n"));
+  expect(updated).toBe(
+    [
+      "![one][photo]",
+      "",
+      "![two](https://cdn.example/b.png)",
+      "",
+      "[photo]: https://cdn.example/a.png",
+      "",
+    ].join("\n"),
+  );
 });
 
 test("applies one URL replacement to every duplicate reference", () => {

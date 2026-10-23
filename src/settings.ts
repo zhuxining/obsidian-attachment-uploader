@@ -1,89 +1,24 @@
-import { createHash } from "node:crypto";
-
-import { uploadCommandDict, type UploadServiceName } from "./services/presets";
-
-export type RemoteImagePastePolicy = "off" | "ask" | "auto";
-
-export type RemoteImageAutoSource = "uPic" | "sample";
-
-export interface RemoteImageAutoRule {
-  prefixes: string[];
-  source: RemoteImageAutoSource;
-  detectedAt: string;
-  fingerprint: string;
-}
-
-export const REMOTE_IMAGE_LIMIT_DEFAULTS = {
-  remoteImageMaxUniqueUrls: 100,
-  remoteImageDownloadConcurrency: 3,
-  remoteImageMaxImageMiB: 20,
-  remoteImageBatchMiB: 200,
-  remoteImageDownloadTimeoutSeconds: 30,
-  remoteImageMaxRedirects: 3,
+export const uploadCommandDict = {
+  uPic: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
+  Picsee: "/Applications/Picsee.app/Contents/MacOS/Picsee -u %s",
+  custom: "",
 } as const;
 
-export type RemoteImageLimitKey = keyof typeof REMOTE_IMAGE_LIMIT_DEFAULTS;
+export type UploadServiceName = keyof typeof uploadCommandDict;
 
-const MIB_BYTES = 1024 * 1024;
-const MAX_TIMER_MS = 2_147_483_647;
-
-export function remoteImageLimitRange(key: RemoteImageLimitKey): { min: number; max: number } {
-  const min = key === "remoteImageMaxRedirects" ? 0 : 1;
-  if (key === "remoteImageMaxImageMiB" || key === "remoteImageBatchMiB") {
-    return { min, max: Math.floor(Number.MAX_SAFE_INTEGER / MIB_BYTES) };
-  }
-  if (key === "remoteImageDownloadTimeoutSeconds") {
-    return { min, max: Math.floor(MAX_TIMER_MS / 1000) };
-  }
-  return { min, max: Number.MAX_SAFE_INTEGER };
-}
-
-export function isRemoteImageLimit(key: RemoteImageLimitKey, value: unknown): value is number {
-  const { min, max } = remoteImageLimitRange(key);
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
-}
-
-type RemoteImageLimits = Record<RemoteImageLimitKey, number>;
-
-export interface PluginSettings extends RemoteImageLimits {
+export interface PluginSettings {
   uploadService: UploadServiceName;
   uploadCommand: string;
-  testFilePath: string;
   uploadFileFormat: Set<string>;
   isDeleteSourceFile: boolean;
-  autoUploadOnSave: boolean;
-  remoteImagePastePolicy: RemoteImagePastePolicy;
-  remoteImageAutoDetectHost: boolean;
-  remoteImageHostRules: Record<string, string[]>;
-  remoteImageAutoHostRules: Record<string, RemoteImageAutoRule>;
+  autoUpload: boolean;
+  autoTransferRemoteImages: boolean;
+  remoteImageSkipPrefixes: string[];
 }
 
 const DEFAULT_FORMATS = ".png,.jpg,.jpeg,.gif,.webp,.svg,.avif,.bmp";
-const PASTE_POLICIES: readonly RemoteImagePastePolicy[] = ["off", "ask", "auto"];
-const AUTO_SOURCES: readonly RemoteImageAutoSource[] = ["uPic", "sample"];
-const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
-const MAX_RULE_KEY_LENGTH = 200;
-const MAX_PREFIXES_PER_RULE = 50;
-const SCOPED_RULE_DIGEST_LENGTH = 16;
-
 export function isUploadServiceName(value: unknown): value is UploadServiceName {
   return typeof value === "string" && Object.hasOwn(uploadCommandDict, value);
-}
-
-export function isRemoteImagePastePolicy(value: unknown): value is RemoteImagePastePolicy {
-  return typeof value === "string" && PASTE_POLICIES.includes(value as RemoteImagePastePolicy);
-}
-
-/**
- * Rules are isolated by upload service and command digest so switching the
- * command never silently reuses prefixes learned for a different destination.
- */
-export function remoteImageRuleScopeKey(service: string, command: string): string {
-  const digest = createHash("sha256")
-    .update(`${service}\u0000${command}`, "utf8")
-    .digest("hex")
-    .slice(0, SCOPED_RULE_DIGEST_LENGTH);
-  return `${service}:${digest}`;
 }
 
 export function parseUploadFormats(value: string): Set<string> {
@@ -98,97 +33,30 @@ export function parseUploadFormats(value: string): Set<string> {
   );
 }
 
-function parsePrefixList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const prefixes: string[] = [];
-  for (const item of value) {
-    if (typeof item !== "string") continue;
-    const prefix = item.trim();
-    if (!prefix || prefix.length > 2048 || seen.has(prefix)) continue;
-    seen.add(prefix);
-    prefixes.push(prefix);
-    if (prefixes.length >= MAX_PREFIXES_PER_RULE) break;
-  }
-  return prefixes;
-}
-
-function setOwnProperty<T>(target: Record<string, T>, key: string, value: T): void {
-  if (!key || key.length > MAX_RULE_KEY_LENGTH || UNSAFE_KEYS.has(key)) return;
-  Object.defineProperty(target, key, {
-    value,
-    enumerable: true,
-    configurable: true,
-    writable: true,
-  });
-}
-
-function parseHostRules(value: unknown): Record<string, string[]> {
-  const result: Record<string, string[]> = {};
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return result;
-  for (const [key, prefixes] of Object.entries(value)) {
-    const parsed = parsePrefixList(prefixes);
-    if (parsed.length) setOwnProperty(result, key, parsed);
-  }
-  return result;
-}
-
-function parseAutoHostRules(value: unknown): Record<string, RemoteImageAutoRule> {
-  const result: Record<string, RemoteImageAutoRule> = {};
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return result;
-  for (const [key, rawRule] of Object.entries(value)) {
-    if (rawRule === null || typeof rawRule !== "object" || Array.isArray(rawRule)) continue;
-    const rule = rawRule as Record<string, unknown>;
-    const prefixes = parsePrefixList(rule.prefixes);
-    if (!prefixes.length) continue;
-    if (
-      typeof rule.source !== "string" ||
-      !AUTO_SOURCES.includes(rule.source as RemoteImageAutoSource)
-    )
-      continue;
-    if (typeof rule.fingerprint !== "string" || !rule.fingerprint) continue;
-    const detectedAt = typeof rule.detectedAt === "string" ? rule.detectedAt : "";
-    setOwnProperty(result, key, {
-      prefixes,
-      source: rule.source as RemoteImageAutoSource,
-      detectedAt,
-      fingerprint: rule.fingerprint,
-    });
-  }
-  return result;
-}
-
 /** Persisted plugin data is untrusted; only accept fields with the expected type. */
 export function parseSettings(value: unknown): PluginSettings {
   const data: Record<string, unknown> =
     value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const uploadService = isUploadServiceName(data.uploadService) ? data.uploadService : "uPic";
-  const limits: RemoteImageLimits = { ...REMOTE_IMAGE_LIMIT_DEFAULTS };
-  for (const key of Object.keys(limits) as RemoteImageLimitKey[]) {
-    const value = data[key];
-    if (isRemoteImageLimit(key, value)) limits[key] = value;
-  }
   return {
-    ...limits,
     uploadService,
     uploadCommand:
       typeof data.uploadCommand === "string"
         ? data.uploadCommand
         : uploadCommandDict[uploadService],
-    testFilePath: typeof data.testFilePath === "string" ? data.testFilePath : "",
     uploadFileFormat: parseUploadFormats(
       typeof data.uploadFileFormat === "string" ? data.uploadFileFormat : DEFAULT_FORMATS,
     ),
     isDeleteSourceFile:
       typeof data.isDeleteSourceFile === "boolean" ? data.isDeleteSourceFile : false,
-    autoUploadOnSave: typeof data.autoUploadOnSave === "boolean" ? data.autoUploadOnSave : false,
-    remoteImagePastePolicy: isRemoteImagePastePolicy(data.remoteImagePastePolicy)
-      ? data.remoteImagePastePolicy
-      : "off",
-    remoteImageAutoDetectHost:
-      typeof data.remoteImageAutoDetectHost === "boolean" ? data.remoteImageAutoDetectHost : true,
-    remoteImageHostRules: parseHostRules(data.remoteImageHostRules),
-    remoteImageAutoHostRules: parseAutoHostRules(data.remoteImageAutoHostRules),
+    autoUpload: typeof data.autoUpload === "boolean" ? data.autoUpload : true,
+    autoTransferRemoteImages: data.autoTransferRemoteImages === true,
+    remoteImageSkipPrefixes: Array.isArray(data.remoteImageSkipPrefixes)
+      ? data.remoteImageSkipPrefixes
+          .filter((prefix): prefix is string => typeof prefix === "string")
+          .map((prefix) => prefix.trim())
+          .filter(Boolean)
+      : [],
   };
 }
 

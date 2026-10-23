@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { executeUploadCommand, prepareUploadCommand, splitCommand } from "../src/services/command";
+import { executeUploadCommand, prepareUploadCommand, splitCommand } from "../src/upload/uploader";
 
 describe("upload command security", () => {
   test("leaves shell syntax in filename inert", () => {

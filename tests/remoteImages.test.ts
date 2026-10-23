@@ -5,6 +5,8 @@ vi.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
 }));
 
+import { applyTextChanges, type TextChange } from "../src/attachments/imageRewriter";
+import { RemoteImageDownloadError } from "../src/upload/imageDownloader";
 import {
   captureRemoteImageReferences,
   ImageTransferService,
@@ -13,10 +15,8 @@ import {
   type RemoteImageTransferSettings,
   type TransferDownloader,
   type TransferProgress,
-} from "../src/services/imageTransferService";
-import { RemoteImageDownloadError } from "../src/services/remoteImageDownloader";
-import { applyTextChanges, type TextChange } from "../src/services/remoteImageRewriter";
-import { UploadCommandQueue } from "../src/services/uploadCommandQueue";
+} from "../src/upload/remoteImages";
+import { Uploader } from "../src/upload/uploader";
 
 function settings(overrides: Partial<RemoteImageTransferSettings> = {}) {
   return {
@@ -121,7 +121,6 @@ function createHarness(
   const run = (
     scope: RemoteImageScope,
     overrides: {
-      mode?: "normal" | "force";
       settings?: RemoteImageTransferSettings;
       signal?: AbortSignal;
     } = {},
@@ -129,7 +128,6 @@ function createHarness(
     service.transfer({
       sourcePath: "note.md",
       scope: capture(scope),
-      mode: overrides.mode ?? "normal",
       settings: overrides.settings ?? settings(),
       signal: overrides.signal ?? new AbortController().signal,
       onProgress: (value) => progress.push(value),
@@ -176,7 +174,7 @@ test("deduplicates identical URLs into one download and one upload", async () =>
   });
 });
 
-test("skips own prefixes and known session outputs, while force mode bypasses both", async () => {
+test("skips own prefixes and known session outputs", async () => {
   const own = {
     text: "https://cdn.example/blog/",
     protocol: "https:" as const,
@@ -193,14 +191,6 @@ test("skips own prefixes and known session outputs, while force mode bypasses bo
   const skipped = await first.run({ kind: "note" }, { settings: settings({ prefixes: [own] }) });
   expect(skipped.skipped).toBe(2);
   expect(first.downloader.downloads).toEqual([]);
-
-  const second = createHarness(content, { sessionOutputs: new Set() });
-  const forced = await second.run(
-    { kind: "note" },
-    { mode: "force", settings: settings({ prefixes: [own] }) },
-  );
-  expect(forced.skipped).toBe(0);
-  expect(second.downloader.downloads).toHaveLength(2);
 });
 
 test.each([
@@ -223,20 +213,23 @@ test.each([
 });
 
 test("cancelling a queued upload does not count as an upload failure", async () => {
-  const queue = new UploadCommandQueue();
   const controller = new AbortController();
-  let release!: () => void;
-  const blocker = queue.enqueue(
+  let release!: (stdout: string) => void;
+  const execute = vi.fn<(command: string, path: string) => Promise<string>>(
     () =>
-      new Promise<void>((resolve) => {
+      new Promise((resolve) => {
         release = resolve;
       }),
   );
-  const execute = vi.fn(async () => ({ success: true, url: "https://cdn.example/a.png" }));
+  const uploader = new Uploader(execute);
+  const blocker = uploader.uploadFile("/blocker.png", { command: "uploader %s" });
   const original = "![](https://source.example/a.png)";
   const harness = createHarness(original, {
     upload: async () => {
-      const pending = queue.enqueue(execute, controller.signal);
+      const pending = uploader.uploadFile("/queued.png", {
+        command: "uploader %s",
+        signal: controller.signal,
+      });
       controller.abort();
       return await pending;
     },
@@ -244,15 +237,15 @@ test("cancelling a queued upload does not count as an upload failure", async () 
   try {
     const summary = await harness.run({ kind: "note" }, { signal: controller.signal });
     expect(summary).toMatchObject({ cancelled: true, failed: 0, succeeded: 0, errors: [] });
-    expect(execute).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
     expect(harness.document.getValue()).toBe(original);
     expect(harness.downloader.released).toEqual(["/tmp/download-1.png"]);
     expect(harness.preserveReceipt).not.toHaveBeenCalled();
   } finally {
-    release();
+    release("https://cdn.example/blocker.png");
     await blocker;
   }
-  expect(execute).not.toHaveBeenCalled();
+  expect(execute).toHaveBeenCalledTimes(1);
 });
 
 test("keeps a real upload failure when cancellation happens during execution", async () => {
@@ -348,7 +341,7 @@ test("relocates a note range after earlier edits", async () => {
   });
   const start = original.indexOf("![]");
   const summary = await harness.run({
-    kind: "selection",
+    kind: "paste",
     start,
     end: start + "![](https://cdn.example/a.png)".length,
     anchorText: "![](https://cdn.example/a.png)",
@@ -359,13 +352,13 @@ test("relocates a note range after earlier edits", async () => {
   );
 });
 
-test("only rewrites references inside the selection", async () => {
+test("only rewrites references inside the pasted range", async () => {
   const content = "![](https://cdn.example/a.png)\n\n![](https://cdn.example/a.png)";
   const harness = createHarness(content);
   const first = content.indexOf("![]");
   const end = first + "![](https://cdn.example/a.png)".length;
   const summary = await harness.run({
-    kind: "selection",
+    kind: "paste",
     start: first,
     end,
     anchorText: "![](https://cdn.example/a.png)",
@@ -401,24 +394,6 @@ test("inlines the transferred image and preserves a shared ordinary link", async
       "",
       "[photo]: https://cdn.example/a.png",
     ].join("\n"),
-  );
-});
-
-test("force mode re-uploads a single image without touching identical neighbours", async () => {
-  const content = "![](https://cdn.example/a.png) and ![](https://cdn.example/a.png)";
-  const harness = createHarness(content);
-  const summary = await harness.run(
-    {
-      kind: "image",
-      imageUrl: "https://cdn.example/a.png",
-      imageStart: 0,
-      imageEnd: "![](https://cdn.example/a.png)".length,
-    },
-    { mode: "force" },
-  );
-  expect(summary.succeeded).toBe(1);
-  expect(harness.document.getValue()).toBe(
-    "![](https://cdn.example/uploaded-1.png) and ![](https://cdn.example/a.png)",
   );
 });
 
@@ -593,27 +568,6 @@ test("loss of editor tracking permanently prevents application", async () => {
   const summary = await harness.run(scope);
   expect(summary.notApplied).toBe(1);
   expect(harness.document.getValue()).toBe(anchor);
-});
-
-test("maps only the captured single image when identical neighbours shift", async () => {
-  const anchor = "![](https://cdn.example/a.png)";
-  const harness = createHarness(`${anchor}\n${anchor}`, {
-    upload: async () => {
-      harness.edit({ from: 0, insert: "prefix\n" });
-      return { success: true, url: "https://own.example/new.png" };
-    },
-  });
-  const summary = await harness.run(
-    {
-      kind: "image",
-      imageStart: anchor.length + 1,
-      imageEnd: anchor.length * 2 + 1,
-      imageUrl: "https://cdn.example/a.png",
-    },
-    { mode: "force" },
-  );
-  expect(summary.succeeded).toBe(1);
-  expect(harness.document.getValue()).toBe(`prefix\n${anchor}\n![](https://own.example/new.png)`);
 });
 
 test("cancelling during the final source read prevents replacement and preserves the result", async () => {

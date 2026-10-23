@@ -1,10 +1,6 @@
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 
-vi.mock("obsidian", () => ({
-  normalizePath: (path: string) => path,
-}));
-
-import { collectRemoteImageReferences, findRemoteImageAtOffset } from "../src/attachmentMatcher";
+import { collectRemoteImageReferences } from "../src/attachments/markdown";
 
 function targets(content: string) {
   return collectRemoteImageReferences(content).references.map((reference) => ({
@@ -90,15 +86,4 @@ test("deduplicates the same URL only at the call site, not in parsing", () => {
   const content =
     "![a](https://cdn.example/a.png) ![b](https://cdn.example/a.png) ![](https://cdn.example/a.png)";
   expect(targets(content)).toHaveLength(3);
-});
-
-test("finds the image under the editor offset", () => {
-  const content = "before ![a](https://cdn.example/a.png) after";
-  const start = content.indexOf("![");
-  expect(findRemoteImageAtOffset(content, start)?.url).toBe("https://cdn.example/a.png");
-  expect(findRemoteImageAtOffset(content, content.indexOf(")"))?.url).toBe(
-    "https://cdn.example/a.png",
-  );
-  expect(findRemoteImageAtOffset(content, content.length - 1)).toBeNull();
-  expect(findRemoteImageAtOffset("no images", 1)).toBeNull();
 });

@@ -1,6 +1,6 @@
 import type { ChangeDesc } from "@codemirror/state";
 
-import { collectRemoteImageReferences, type RemoteImageReference } from "../attachmentMatcher";
+import { collectRemoteImageReferences, type RemoteImageReference } from "./markdown";
 
 interface TrackedRange {
   start: number;

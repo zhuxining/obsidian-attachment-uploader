@@ -1,19 +1,18 @@
+import { ImageReferenceTracker } from "../attachments/imageReferenceTracker";
+import { buildRemoteImageReplacements, type TextChange } from "../attachments/imageRewriter";
+import { toMarkdownUrl } from "../attachments/imageRewriter";
 import {
   collectRemoteImageReferences,
   type RemoteImageDocument,
   type RemoteImageReference,
-} from "../attachmentMatcher";
-import { ImageReferenceTracker } from "./imageReferenceTracker";
+} from "../attachments/markdown";
 import {
   RemoteImageDownloadError,
   type DownloadedImage,
   type RemoteImageDownloadFailureCode,
-} from "./remoteImageDownloader";
-import { buildRemoteImageReplacements, type TextChange } from "./remoteImageRewriter";
-import { UploadCancelledError } from "./uploadCommandQueue";
-import type { UploadResult } from "./uploadService";
-import { isOwnRemoteImageUrl, type RemoteHostPrefix } from "./uploadTargetResolver";
-import { toMarkdownUrl } from "./url";
+} from "./imageDownloader";
+import { UploadCancelledError } from "./uploader";
+import type { UploadResult } from "./uploader";
 
 export const MAX_UNIQUE_REMOTE_IMAGES = 100;
 export const MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -21,7 +20,7 @@ export const MAX_REMOTE_IMAGE_BATCH_BYTES = 200 * 1024 * 1024;
 export const REMOTE_IMAGE_DOWNLOAD_CONCURRENCY = 3;
 const MAX_SESSION_OUTPUT_URLS = 2_000;
 
-export type RemoteImageScopeKind = "note" | "selection" | "paste" | "image";
+export type RemoteImageScopeKind = "note" | "paste";
 
 export interface RemoteImageScope {
   kind: RemoteImageScopeKind;
@@ -29,13 +28,7 @@ export interface RemoteImageScope {
   start?: number;
   end?: number;
   anchorText?: string;
-
-  imageUrl?: string;
-  imageStart?: number;
-  imageEnd?: number;
 }
-
-export type RemoteImageTransferMode = "normal" | "force";
 
 export function isAllowedRemoteImageFormat(
   formats: ReadonlySet<string>,
@@ -109,7 +102,6 @@ export interface TransferSummary {
 export interface TransferInput {
   sourcePath: string;
   scope: RemoteImageScope;
-  mode: RemoteImageTransferMode;
   settings: RemoteImageTransferSettings;
   signal: AbortSignal;
   onProgress?: (progress: TransferProgress) => void;
@@ -125,7 +117,7 @@ interface DownloadOutcome {
   error?: RemoteImageDownloadFailureCode | "format-not-allowed";
 }
 
-function emptySummary(): TransferSummary {
+export function emptyTransferSummary(): TransferSummary {
   return {
     totalReferences: 0,
     uniqueUrls: 0,
@@ -144,14 +136,6 @@ function referencesInScope(
   scope: RemoteImageScope,
 ): RemoteImageReference[] {
   if (scope.kind === "note") return document.references;
-  if (scope.kind === "image") {
-    const matching = document.references.filter((reference) => reference.url === scope.imageUrl);
-    const exact = matching.find(
-      (reference) => reference.start === scope.imageStart && reference.end === scope.imageEnd,
-    );
-    if (exact) return [exact];
-    return [];
-  }
   if (scope.start === undefined || scope.end === undefined) return [];
   return document.references.filter(
     (reference) => reference.start >= scope.start! && reference.end <= scope.end!,
@@ -191,12 +175,10 @@ function classifyError(error: unknown): RemoteImageDownloadFailureCode {
 
 export function remoteImageSessionKey(url: string): string {
   const formatted = toMarkdownUrl(url);
-  return formatted.startsWith("<") && formatted.endsWith(">")
-    ? formatted.slice(1, -1)
-    : formatted;
+  return formatted.startsWith("<") && formatted.endsWith(">") ? formatted.slice(1, -1) : formatted;
 }
 
-function rememberSessionOutput(outputs: Set<string>, url: string): void {
+export function rememberSessionOutput(outputs: Set<string>, url: string): void {
   outputs.add(remoteImageSessionKey(url));
   if (outputs.size <= MAX_SESSION_OUTPUT_URLS) return;
   const oldest = outputs.values().next().value;
@@ -215,7 +197,7 @@ export class ImageTransferService {
   }
 
   async transfer(input: TransferInput): Promise<TransferSummary> {
-    const summary = emptySummary();
+    const summary = emptyTransferSummary();
     const { settings, signal, scope } = input;
     if (signal.aborted) {
       summary.cancelled = true;
@@ -237,14 +219,12 @@ export class ImageTransferService {
     const candidates: RemoteImageReference[] = [];
     const skippedUrls = new Set<string>();
     for (const reference of scoped) {
-      if (input.mode !== "force") {
-        if (
-          isOwnRemoteImageUrl(reference.url, settings.prefixes) ||
-          this.deps.sessionOutputs.has(remoteImageSessionKey(reference.url))
-        ) {
-          skippedUrls.add(reference.url);
-          continue;
-        }
+      if (
+        isOwnRemoteImageUrl(reference.url, settings.prefixes) ||
+        this.deps.sessionOutputs.has(remoteImageSessionKey(reference.url))
+      ) {
+        skippedUrls.add(reference.url);
+        continue;
       }
       candidates.push(reference);
     }
@@ -433,4 +413,69 @@ export class ImageTransferService {
     }
     return summary;
   }
+}
+
+export interface RemoteHostPrefix {
+  protocol: "http:" | "https:";
+  hostname: string;
+  port: string;
+  pathname: string;
+  text: string;
+}
+
+export function parseRemoteHostPrefix(value: string): RemoteHostPrefix | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return null;
+
+  const pathname = parsed.pathname.endsWith("/") ? parsed.pathname : `${parsed.pathname}/`;
+
+  return {
+    protocol: parsed.protocol,
+    hostname: parsed.hostname.toLowerCase(),
+    port: parsed.port,
+    pathname,
+    text: `${parsed.protocol}//${parsed.host}${pathname}`,
+  };
+}
+
+export function compileRemoteHostPrefixes(values: readonly string[]): RemoteHostPrefix[] {
+  const seen = new Set<string>();
+  const prefixes: RemoteHostPrefix[] = [];
+  for (const value of values) {
+    const parsed = parseRemoteHostPrefix(value);
+    if (!parsed || seen.has(parsed.text)) continue;
+    seen.add(parsed.text);
+    prefixes.push(parsed);
+  }
+  return prefixes;
+}
+
+/**
+ * Protocol, exact host, effective port and a path-directory boundary must all
+ * match. Query strings and fragments in the image URL are preserved separately
+ * and never relaxed here.
+ */
+export function isUrlCoveredByPrefix(url: URL, prefix: RemoteHostPrefix): boolean {
+  if (url.protocol !== prefix.protocol) return false;
+  if (url.hostname.toLowerCase() !== prefix.hostname) return false;
+  if (url.port !== prefix.port) return false;
+  return prefix.pathname === "/" || url.pathname.startsWith(prefix.pathname);
+}
+
+export function isOwnRemoteImageUrl(url: string, prefixes: readonly RemoteHostPrefix[]): boolean {
+  if (!prefixes.length) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  return prefixes.some((prefix) => isUrlCoveredByPrefix(parsed, prefix));
 }

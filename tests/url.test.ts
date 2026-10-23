@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { extractUrl, toMarkdownUrl } from "../src/services/url";
+import { toMarkdownUrl } from "../src/attachments/imageRewriter";
+import { extractUrl } from "../src/upload/uploader";
 
 // 真实 uPic 输出：URL 独占一行，位于 "Output URL:" 之后
 const UPIC_STDOUT = [
