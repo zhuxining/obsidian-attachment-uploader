@@ -1,59 +1,127 @@
 export default {
-  "Upload current note attachments": "Upload attachments in current note",
-  "Uploading attachments...": "Processing attachments...",
+  "Migrate vault attachments": "Migrate vault attachments",
+  "Ready to scan": "Ready to scan",
+  "Scanning notes...": "Scanning notes...",
+  "Review migration": "Review migration",
+  "Migrating attachments...": "Migrating attachments...",
+  "Migration paused": "Migration paused",
+  "Migration completed": "Migration completed",
+  "Migration cancelled": "Migration cancelled",
+  "Migration stopped": "Migration stopped",
+  "The note was open, so it was skipped. Close it and scan again to migrate it.":
+    "The note was open, so it was skipped. Close it and scan again to migrate it.",
+  "Note changed during migration; original content was kept.":
+    "Note changed during migration; original content was kept.",
+  "Note no longer exists.": "Note no longer exists.",
+  "A local attachment changed or is unavailable; its link was kept.":
+    "A local attachment changed or is unavailable; its link was kept.",
+  "Could not read or update this note.": "Could not read or update this note.",
+  "An attachment could not be uploaded; its link was kept.":
+    "An attachment could not be uploaded; its link was kept.",
+  "This note exceeds the remote image limit; remote links were kept.":
+    "This note exceeds the remote image limit; remote links were kept.",
+  "Migration cancelled; remaining links were kept.":
+    "Migration cancelled; remaining links were kept.",
+  "No attachments need to be migrated.": "No attachments need to be migrated.",
+  Updated: "Updated",
+  Failed: "Failed",
+  Skipped: "Skipped",
+  "Updated attachments:": "Updated attachments:",
+  "Skipped duplicate uploads:": "Skipped duplicate uploads:",
+  "Run “Migrate vault attachments” to view the results.":
+    "Run “Migrate vault attachments” to view the results.",
+  "Run “Migrate vault attachments” to return to this task.":
+    "Run “Migrate vault attachments” to return to this task.",
+  "Scans Markdown notes, reviews the scope, then uploads referenced attachments and updates their links. Unreferenced vault files are not uploaded, and local source files are kept.":
+    "Scans Markdown notes, reviews the scope, then uploads referenced attachments and updates their links. Unreferenced vault files are not uploaded, and local source files are kept.",
+  "Open notes are skipped. You can close this panel while the task runs; quitting Obsidian stops the task, and progress is not saved.":
+    "Open notes are skipped. You can close this panel while the task runs; quitting Obsidian stops the task, and progress is not saved.",
+  "Excluded folders": "Excluded folders",
+  "One vault-relative folder per line, for example Templates or Attachments/private. Notes and local files in these folders are skipped.":
+    "One vault-relative folder per line, for example Templates or Attachments/private. Notes and local files in these folders are skipped.",
+  "Current note:": "Current note:",
+  "Current attachment:": "Current attachment:",
+  "The image server requested a pause. Review the results before resuming.":
+    "The image server requested a pause. Review the results before resuming.",
+  "Three consecutive operations failed. Check the upload tool and network before resuming.":
+    "Three consecutive operations failed. Check the upload tool and network before resuming.",
+  "Upload settings changed. Scan again before starting a new migration.":
+    "Upload settings changed. Scan again before starting a new migration.",
+  "Notes to migrate: {count}": "Notes to migrate: {count}",
+  "Local files: {count}": "Local files: {count}",
+  "Remote images: {count}": "Remote images: {count}",
+  "Missing local references: {count}. Their links will be kept.":
+    "Missing local references: {count}. Their links will be kept.",
+  "Notes that could not be scanned: {count}": "Notes that could not be scanned: {count}",
+  "Showing the first {count} notes.": "Showing the first {count} notes.",
+  "Processed notes:": "Processed notes:",
+  "Scan notes": "Scan notes",
+  "Start migration": "Start migration",
+  Resume: "Resume",
+  Pause: "Pause",
+  "Attachments are processed one at a time. A failed upload keeps the original link. Cancelling does not remove files that were already uploaded.":
+    "Attachments are processed one at a time. A failed upload keeps the original link. Cancelling does not remove files that were already uploaded.",
+  "Migration results": "Migration results",
+  "Copy results": "Copy results",
+  "Migration results copied.": "Migration results copied.",
+  "Could not copy migration results:": "Could not copy migration results:",
+  "Showing the last {count} results. Copy results to include all entries.":
+    "Showing the last {count} results. Copy results to include all entries.",
+  "Upload current note attachments": "Upload current note attachments",
+  "Uploading attachments...": "Uploading attachments...",
   "Upload cancelled.": "Upload cancelled.",
   "Uploaded:": "Uploaded:",
   "Upload tool": "Upload tool",
   Custom: "Custom",
-  "Upload command instructions":
-    "Include one standalone %s argument for the file path. The command must return one HTTP(S) URL in standard output.",
-  "Test upload": "Upload test",
+  "Upload command instructions": "Upload command instructions",
+  "Test upload": "Test upload",
   "Testing uploads the selected file to your configured host.":
-    "This test uploads the specified file.",
-  "Upload behavior": "Upload options",
+    "Testing uploads the selected file to your configured host.",
+  "Upload behavior": "Upload behavior",
   "Automatically upload attachments when pasting or dragging files.":
-    "Upload pasted screenshots and pasted or dropped files, then insert their links.",
+    "Automatically upload attachments when pasting or dragging files.",
   "Include remote images": "Include remote images",
   "Also transfer HTTP(S) images in pasted Markdown text.":
-    "When auto upload is enabled, also upload remote images in pasted Markdown and replace their links.",
+    "Also transfer HTTP(S) images in pasted Markdown text.",
   "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.":
-    "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Applies to manual and automatic uploads.",
+    "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.",
   "Only delete vault source files after replacing links and checking remaining references.":
-    "Delete the original vault file after updating its links. Keep it if references remain or cannot be checked.",
-  "Skip rules": "Remote images",
+    "Only delete vault source files after replacing links and checking remaining references.",
+  "Skip rules": "Skip rules",
   "One HTTP(S) URL prefix per line. Applies to manual and automatic transfers.":
-    "One HTTP(S) URL prefix per line, e.g. https://example.com/images/. Matching images are skipped in manual and automatic transfers.",
-  "Attachment recovery copy saved:": "Attachment saved to:",
+    "One HTTP(S) URL prefix per line. Applies to manual and automatic transfers.",
+  "Attachment recovery copy saved:": "Attachment recovery copy saved:",
   "Attachment recovery failed; temporary copy retained:":
-    "Could not save the attachment. Check the temporary file location:",
+    "Attachment recovery failed; temporary copy retained:",
   Unavailable: "Unavailable",
-  "No attachment matching the upload conditions was found.": "No attachments to upload.",
-  "Upload service": "Tool",
-  "Executed command": "Upload command",
-  "Test file path": "Local file path",
-  "Upload test": "Run test",
-  "Enter the test file path": "Enter the full path to a local file.",
+  "No attachment matching the upload conditions was found.":
+    "No attachment matching the upload conditions was found.",
+  "Upload service": "Upload service",
+  "Executed command": "Executed command",
+  "Test file path": "Test file path",
+  "Upload test": "Upload test",
+  "Enter the test file path": "Enter the test file path",
   "Upload successful": "Upload successful",
   "Upload failed": "Upload failed",
-  "Attachment format to be uploaded": "Allowed file types",
-  "Delete local files after successful upload": "Delete local attachments after upload",
+  "Attachment format to be uploaded": "Attachment format to be uploaded",
+  "Delete local files after successful upload": "Delete local files after successful upload",
   "Upload succeeded but was not applied. Recovery receipt:":
-    "Upload succeeded, but the note links could not be updated. Upload details saved to:",
+    "Upload succeeded but was not applied. Recovery receipt:",
   "Upload succeeded but recovery receipt could not be saved. URL:":
-    "Upload succeeded, but the note links and upload record could not be saved. Keep this URL:",
+    "Upload succeeded but recovery receipt could not be saved. URL:",
   "Auto upload": "Auto upload",
-  "Remote image transfer failed:": "Could not transfer remote images:",
+  "Remote image transfer failed:": "Remote image transfer failed:",
   Cancel: "Cancel",
   "Cancelling...": "Cancelling...",
   Downloading: "Downloading",
   Uploading: "Uploading",
-  Applying: "Updating links",
+  Applying: "Applying",
   "A maximum of {limit} remote image URLs can be transferred at once.":
     "A maximum of {limit} remote image URLs can be transferred at once.",
   "Failed:": "Failed:",
   "Skipped:": "Skipped:",
-  "Not applied:": "Links not updated:",
-  "Remote image URL prefixes to skip": "Skip URL prefixes",
+  "Not applied:": "Not applied:",
+  "Remote image URL prefixes to skip": "Remote image URL prefixes to skip",
   "Upload failed:": "Upload failed:",
   "Unknown error": "Unknown error",
   "Could not remove temporary files:": "Could not remove temporary files:",

@@ -17,6 +17,8 @@ import {
 import { AttachmentMatcher } from "./attachments/vaultAttachments";
 import { FileInsertion } from "./fileInsertion";
 import { t } from "./lang/helpers";
+import { BatchMigration } from "./migration/batchMigration";
+import { VaultMigration } from "./migration/vaultMigration";
 import type { PluginSettings } from "./settings";
 import { RemoteImageDownloader } from "./upload/imageDownloader";
 import { LocalAttachments } from "./upload/localAttachments";
@@ -129,6 +131,20 @@ export class UploadWorkflow {
         signal,
         onSuccess: (url) => rememberSessionOutput(outputs, url),
       });
+  }
+
+  createBatchMigration(): BatchMigration {
+    return new BatchMigration(
+      new VaultMigration(
+        this.app,
+        () => this.settings,
+        () => this.captureUpload(),
+        () => {
+          this.syncRemoteTarget();
+          return this.remoteOutputUrls;
+        },
+      ),
+    );
   }
 
   async uploadFile(path: string, signal?: AbortSignal): Promise<UploadResult> {

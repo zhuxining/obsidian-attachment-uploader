@@ -2,6 +2,8 @@ import { ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { editorInfoField, Plugin } from "obsidian";
 
 import { t } from "./lang/helpers";
+import type { BatchMigration } from "./migration/batchMigration";
+import { MigrationModal } from "./migration/migrationModal";
 import { parseSettings, serializeSettings, type PluginSettings } from "./settings";
 import { SettingTab } from "./settingsTab";
 import { UploadWorkflow } from "./uploadWorkflow";
@@ -33,6 +35,21 @@ export default class AttachmentUploader extends Plugin {
       id: "upload-editor-attachments",
       name: t("Upload current note attachments"),
       editorCallback: async () => await workflow.uploadCurrentNote(),
+    });
+    let migration: BatchMigration | undefined;
+    let migrationModal: MigrationModal | undefined;
+    this.addCommand({
+      id: "migrate-vault-attachments",
+      name: t("Migrate vault attachments"),
+      callback: () => {
+        migration ??= workflow.createBatchMigration();
+        migrationModal ??= new MigrationModal(this.app, migration);
+        migrationModal.show();
+      },
+    });
+    this.register(() => {
+      migrationModal?.dispose();
+      migration?.cancel();
     });
     this.addSettingTab(new SettingTab(this.app, this));
     this.registerEvent(
