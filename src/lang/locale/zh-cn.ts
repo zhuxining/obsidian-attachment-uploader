@@ -79,8 +79,8 @@ export default {
   "Include remote images": "包含外链图片",
   "Also transfer HTTP(S) images in pasted Markdown text.":
     "开启自动上传后，同时转存粘贴 Markdown 文本中的外链图片。",
-  "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.":
-    "填写扩展名，以英文逗号或换行分隔，例如 .png、.jpg、.pdf。适用于手动和自动上传。",
+  "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Used by manual uploads, pasted or dropped files, remote image transfers and batch migration; the test upload in settings is not filtered.":
+    "填写扩展名，以英文逗号或换行分隔，例如 .png、.jpg、.pdf。手动上传、粘贴或拖入文件、外链转存和批量迁移都会按此过滤；设置页的上传测试不受限制。",
   "Only delete vault source files after replacing links and checking remaining references.":
     "链接替换成功后删除库内原文件；仍有引用或无法确认时保留。",
   "Skip rules": "外链图片",

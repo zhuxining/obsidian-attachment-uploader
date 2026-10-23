@@ -118,7 +118,7 @@ ${result.url ?? ""}`
       .setName(t("Attachment format to be uploaded"))
       .setDesc(
         t(
-          "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.",
+          "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Used by manual uploads, pasted or dropped files, remote image transfers and batch migration; the test upload in settings is not filtered.",
         ),
       )
       .addTextArea((textArea) => {

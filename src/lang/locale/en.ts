@@ -83,8 +83,8 @@ export default {
   "Include remote images": "Include remote images",
   "Also transfer HTTP(S) images in pasted Markdown text.":
     "Also transfer HTTP(S) images in pasted Markdown text.",
-  "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.":
-    "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.",
+  "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Used by manual uploads, pasted or dropped files, remote image transfers and batch migration; the test upload in settings is not filtered.":
+    "File extensions separated by commas or line breaks, e.g. .png, .jpg, .pdf. Used by manual uploads, pasted or dropped files, remote image transfers and batch migration; the test upload in settings is not filtered.",
   "Only delete vault source files after replacing links and checking remaining references.":
     "Only delete vault source files after replacing links and checking remaining references.",
   "Skip rules": "Skip rules",
