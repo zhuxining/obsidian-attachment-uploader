@@ -287,6 +287,17 @@ test("HTTP 429 is reported as a rate limit and the original URL is kept", async 
   expect(f.contents.get("a.md")).toBe("![](https://old.example/a.png)");
 });
 
+test("a note with both remote and local attachments rewrites offsets after the remote phase", async () => {
+  mockImages();
+  const f = fixture({ "a.md": "![remote](https://old.example/a.png)\n\n![](assets/a.png)" });
+  const result = await f.migration.migrate("a.md", f.context);
+  expect(result).toMatchObject({ status: "updated", updated: 2 });
+  expect(f.contents.get("a.md")).toBe(
+    "![remote](https://new.example/1.png)\n\n![a.png](https://new.example/2.png)",
+  );
+  expect(f.upload).toHaveBeenCalledTimes(2);
+});
+
 test("a note's remote image limit does not prevent migrating its local attachment", async () => {
   const f = fixture({
     "a.md":
