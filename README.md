@@ -1,4 +1,4 @@
-# Compatibility
+### Compatibility
 
 Requires Obsidian Desktop **1.14.4 or later**. Upload commands run as local executables, so mobile devices are not supported.
 
@@ -70,6 +70,10 @@ Batch migration only processes attachments referenced by Markdown notes and neve
 Remote image transfers use fixed limits: 100 unique URLs per operation, 3 concurrent downloads, 20 MiB per image, 200 MiB per batch, 30 seconds per download and 3 redirects.
 
 ## Limits and defaults
+
+### Compatibility
+
+Requires Obsidian Desktop **1.14.4 or later**. Upload commands run as local executables, so mobile devices are not supported.
 
 ### Defaults
 
