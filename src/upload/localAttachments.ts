@@ -1,12 +1,10 @@
-import { type App, type Editor, type MarkdownView, Notice, TFile } from "obsidian";
+import { type App, type Editor, type MarkdownView, TFile } from "obsidian";
 
-import { AttachmentMatcher, type Attachment } from "../attachmentMatcher";
-import { t } from "../lang/helpers";
-import { executeUploadCommand } from "./command";
-import { preserveUploadReceipt } from "./uploadReceipts";
-import { extractUrl, toMarkdownUrl } from "./url";
+import { formatUploadedFile } from "../attachments/imageRewriter";
+import { AttachmentMatcher, type Attachment } from "../attachments/vaultAttachments";
+import { preserveUploadReceipt } from "./recovery";
+import type { UploadFile } from "./uploader";
 
-const IMAGE_EXTENSION_REGEX = /\.(avif|bmp|gif|jpeg|jpg|png|svg|webp)$/i;
 const MAX_REFERENCE_DECODE_PASSES = 4;
 const MAX_SCAN_NOTES = 128;
 const MAX_SCAN_CHARACTERS = 4 * 1024 * 1024;
@@ -18,6 +16,7 @@ const REMOTE_LINK_REGEX =
 const REMOTE_URL_REGEX = /https?:\/\/[^\s<>)]+/gi;
 const PERCENT_BYTES_REGEX = /(?:%[\da-f]{2})+/gi;
 const HTML_ENTITY_REGEX = /&(?:#\d+|#x[\da-f]+|[a-z][\da-z]*);/i;
+const MARKDOWN_ESCAPE_REGEX = /\\([!-/:-@[-`{-~])/g;
 
 /** Unknown encodings are evidence to preserve the source, not proof of absence. */
 function mayReferenceFile(content: string, file: TFile): boolean {
@@ -37,8 +36,11 @@ function mayReferenceFile(content: string, file: TFile): boolean {
         });
       }
     });
-    if (decoded === text) break;
-    text = decoded;
+    // Markdown permits backslash escapes for ASCII punctuation in destinations.
+    // Normalize after percent decoding too, so encoded escapes cannot hide a reference.
+    const unescaped = decoded.replace(MARKDOWN_ESCAPE_REGEX, "$1");
+    if (unescaped === text) break;
+    text = unescaped;
   }
   return (
     text.includes(file.name) ||
@@ -48,8 +50,7 @@ function mayReferenceFile(content: string, file: TFile): boolean {
   );
 }
 
-export type UploadResult = { success: boolean; url?: string; errorMessage?: string };
-export type UploadTasks = Map<string, Promise<UploadResult>>;
+export type AttachmentUploadStatus = "succeeded" | "failed" | "skipped" | "notApplied";
 
 type UploadEditor = Pick<Editor, "getValue" | "offsetToPos" | "transaction">;
 
@@ -67,22 +68,19 @@ function replaceAttachments(
   });
 }
 
-export class UploadService {
-  private uploadCommand: string;
-  private isDeleteSourceFile: boolean;
-  private uploadFileFormat: Set<string>;
-  private readonly tasks: UploadTasks;
+export class LocalAttachments {
+  readonly uploadFile: UploadFile;
+  private readonly isDeleteSourceFile: boolean;
+  private readonly uploadFileFormat: ReadonlySet<string>;
 
   constructor(
-    uploadCommand: string,
+    uploadFile: UploadFile,
     isDeleteSourceFile: boolean,
-    uploadFileFormat: Set<string>,
-    tasks: UploadTasks = new Map(),
+    uploadFileFormat: ReadonlySet<string>,
   ) {
-    this.uploadCommand = uploadCommand;
+    this.uploadFile = uploadFile;
     this.isDeleteSourceFile = isDeleteSourceFile;
     this.uploadFileFormat = uploadFileFormat;
-    this.tasks = tasks;
   }
 
   /**
@@ -96,47 +94,10 @@ export class UploadService {
   }
 
   /**
-   * 检查文件是否可上传
-   */
-  isUploadableFile(filename: string): boolean {
-    const ext = filename.split(".").pop()?.toLowerCase() || "";
-    return this.uploadFileFormat.has(`.${ext}`);
-  }
-
-  /**
    * 过滤符合上传条件的附件列表
    */
   filterUploadableAttachments(attachments: Attachment[]): Attachment[] {
     return attachments.filter((attachment) => this.isValidAttachment(attachment));
-  }
-
-  /**
-   * 执行上传服务
-   * 使用设置的上传命令上传文件
-   */
-  async uploadServe(path: string): Promise<UploadResult> {
-    const key = JSON.stringify([this.uploadCommand, path]);
-    const existing = this.tasks.get(key);
-    if (existing) return await existing;
-    const task = this.executeUpload(path);
-    this.tasks.set(key, task);
-    try {
-      return await task;
-    } finally {
-      this.tasks.delete(key);
-    }
-  }
-
-  private async executeUpload(path: string): Promise<UploadResult> {
-    try {
-      const stdout = await executeUploadCommand(this.uploadCommand, path);
-      const url = extractUrl(stdout);
-      return url
-        ? { success: true, url }
-        : { success: false, errorMessage: "No valid upload URL was returned" };
-    } catch (err) {
-      return { success: false, errorMessage: (err as Error).message };
-    }
   }
 
   /**
@@ -150,7 +111,9 @@ export class UploadService {
       file?: TFile | null;
     },
     app: App,
-  ): Promise<void> {
+    signal?: AbortSignal,
+  ): Promise<AttachmentUploadStatus> {
+    if (signal?.aborted) return "skipped";
     const sourceNote = activeEditor.file;
     const references = new AttachmentMatcher(app).getEditorAttachments(activeEditor);
     if (
@@ -159,7 +122,7 @@ export class UploadService {
           candidate.existenceState === "local" && candidate.inVaultPath === attachment.inVaultPath,
       )
     )
-      return;
+      return "skipped";
     const sourceFile = app.vault.getAbstractFileByPath(attachment.inVaultPath);
     const sourcePath = sourceFile?.path;
     let sourceStat: { size: number; mtime: number } | null = null;
@@ -171,24 +134,22 @@ export class UploadService {
         // Stat failure must not prevent uploading; it only disables deletion.
       }
     }
-    const uploadResult = await this.uploadServe(attachment.inSystemPath);
+    if (signal?.aborted) return "skipped";
+    const uploadResult = await this.uploadFile(attachment.inSystemPath, signal);
 
     if (uploadResult.success && uploadResult.url) {
       // A view can be reused for a different note while the command is running.
       let replaced = false;
       try {
-        if (activeEditor.file === sourceNote)
+        if (!signal?.aborted && activeEditor.file === sourceNote)
           replaced = this.updateEditorContent(activeEditor, attachment, uploadResult.url, app);
       } catch {
         // The command already succeeded; retain its result independently of the editor.
       }
       if (!replaced) {
         await preserveUploadReceipt(uploadResult.url, attachment.inSystemPath, attachment.basename);
-        return;
+        return "notApplied";
       }
-      new Notice(
-        `${t("Uploaded attachment:")}${attachment.inVaultPath}\n${t("Replace with:")}${uploadResult.url}`,
-      );
       if (this.isDeleteSourceFile && sourceFile instanceof TFile && sourceStat) {
         // Preserve an attachment if any other note may still refer to it.
         const safeToTrash = await this.noRemainingReferences(app, sourceFile);
@@ -196,6 +157,7 @@ export class UploadService {
           try {
             const stat = await app.vault.adapter.stat(sourceFile.path);
             if (
+              signal?.aborted ||
               sourceFile.path !== sourcePath ||
               app.vault.getAbstractFileByPath(sourceFile.path) !== sourceFile ||
               stat?.type !== "file" ||
@@ -203,19 +165,16 @@ export class UploadService {
               stat.mtime !== sourceStat.mtime ||
               !this.noOpenReferences(app, sourceFile)
             )
-              return;
+              return "succeeded";
           } catch {
-            return;
+            return "succeeded";
           }
           await app.fileManager.trashFile(sourceFile);
-          new Notice(`${t("Local attachment deleted")}: ${attachment.inVaultPath}`);
         }
       }
-    } else {
-      new Notice(
-        `${t("Upload failed:")}${attachment.inVaultPath}\n\n${t("Error message:")}\n${uploadResult.errorMessage}`,
-      );
+      return "succeeded";
     }
+    return "failed";
   }
 
   /**
@@ -240,16 +199,8 @@ export class UploadService {
           candidate.existenceState === "local" && candidate.inVaultPath === attachment.inVaultPath,
       );
     if (!attachments.length) return false;
-    replaceAttachments(active, attachments, this.formatUploadedFile(attachment.basename, newUrl));
+    replaceAttachments(active, attachments, formatUploadedFile(attachment.basename, newUrl));
     return true;
-  }
-
-  formatUploadedFile(filename: string, url: string): string {
-    const target = toMarkdownUrl(url);
-    const label = filename.replace(/[\\[\]]/g, "\\$&");
-    return IMAGE_EXTENSION_REGEX.test(filename)
-      ? `![${label}](${target})`
-      : `[${label}](${target})`;
   }
 
   /** Fail closed: never delete when references remain or the scan fails. */
@@ -299,43 +250,5 @@ export class UploadService {
       }
     }
     return performance.now() - started < MAX_SCAN_MS;
-  }
-
-  /**
-   * 插入上传后的文件链接
-   */
-  insertUploadedFile(editor: Editor, filename: string, url: string) {
-    editor.replaceRange(this.formatUploadedFile(filename, url), editor.getCursor());
-  }
-
-  /**
-   * 在所有打开的编辑器中替换本地文件链接
-   */
-  async replaceLocalLinksInAllEditors(app: App, file: TFile, newUrl: string): Promise<number> {
-    const leaves = app.workspace.getLeavesOfType("markdown");
-    const matcher = new AttachmentMatcher(app);
-    let replacements = 0;
-
-    for (const leaf of leaves) {
-      if (leaf.isDeferred) continue;
-      const view = leaf.view;
-      if (view && "editor" in view) {
-        const markdownView = view as MarkdownView;
-        const editor = markdownView.editor;
-        if (editor && markdownView.file) {
-          const attachments = matcher
-            .getEditorAttachments(markdownView)
-            .filter(
-              (attachment) =>
-                attachment.existenceState === "local" && attachment.inVaultPath === file.path,
-            );
-          if (attachments.length) {
-            replaceAttachments(editor, attachments, this.formatUploadedFile(file.name, newUrl));
-            replacements += attachments.length;
-          }
-        }
-      }
-    }
-    return replacements;
   }
 }

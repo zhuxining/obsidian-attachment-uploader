@@ -17,8 +17,8 @@ test("rejects malformed persisted settings and unknown service names", () => {
   });
   expect(settings.uploadService).toBe("uPic");
   expect(typeof settings.uploadCommand).toBe("string");
-  expect(settings.autoUploadOnSave).toBe(false);
-  expect(settings.testFilePath).toBe("");
+  expect(settings.autoUpload).toBe(true);
+  expect(settings).not.toHaveProperty("testFilePath");
 });
 
 test("normalizes persisted formats and preserves custom commands across serialization", () => {
@@ -29,4 +29,28 @@ test("normalizes persisted formats and preserves custom commands across serializ
   });
   expect([...settings.uploadFileFormat]).toEqual([".png", ".jpg"]);
   expect(parseSettings(serializeSettings(settings))).toEqual(settings);
+});
+
+test("auto-upload defaults on, remote inclusion and source deletion default off", () => {
+  expect(parseSettings(null)).toMatchObject({
+    autoUpload: true,
+    autoTransferRemoteImages: false,
+    isDeleteSourceFile: false,
+  });
+});
+
+test("retains the remote inclusion preference when automatic uploading is off", () => {
+  const settings = parseSettings({ autoUpload: false, autoTransferRemoteImages: true });
+  expect(parseSettings(serializeSettings(settings))).toMatchObject({
+    autoUpload: false,
+    autoTransferRemoteImages: true,
+  });
+});
+
+test("removed file-change automation and test paths are not persisted", () => {
+  const settings = serializeSettings(
+    parseSettings({ autoUploadOnSave: true, testFilePath: "/private/test.png" }),
+  );
+  expect(settings).not.toHaveProperty("autoUploadOnSave");
+  expect(settings).not.toHaveProperty("testFilePath");
 });

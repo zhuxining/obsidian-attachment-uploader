@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { extractUrl, toMarkdownUrl } from "../src/services/url";
+import { toMarkdownUrl } from "../src/attachments/imageRewriter";
+import { extractUrl } from "../src/upload/uploader";
 
 describe("safe upload URL handling", () => {
   test("extracts uPic output", () => {

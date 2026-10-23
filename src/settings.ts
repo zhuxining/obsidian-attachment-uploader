@@ -1,16 +1,22 @@
-import { uploadCommandDict, type UploadServiceName } from "./services/presets";
+export const uploadCommandDict = {
+  uPic: "/Applications/uPic.app/Contents/MacOS/uPic -o url -u %s",
+  Picsee: "/Applications/Picsee.app/Contents/MacOS/Picsee -u %s",
+  custom: "",
+} as const;
+
+export type UploadServiceName = keyof typeof uploadCommandDict;
 
 export interface PluginSettings {
   uploadService: UploadServiceName;
   uploadCommand: string;
-  testFilePath: string;
   uploadFileFormat: Set<string>;
   isDeleteSourceFile: boolean;
-  autoUploadOnSave: boolean;
+  autoUpload: boolean;
+  autoTransferRemoteImages: boolean;
+  remoteImageSkipPrefixes: string[];
 }
 
 const DEFAULT_FORMATS = ".png,.jpg,.jpeg,.gif,.webp,.svg,.avif,.bmp";
-
 export function isUploadServiceName(value: unknown): value is UploadServiceName {
   return typeof value === "string" && Object.hasOwn(uploadCommandDict, value);
 }
@@ -38,13 +44,19 @@ export function parseSettings(value: unknown): PluginSettings {
       typeof data.uploadCommand === "string"
         ? data.uploadCommand
         : uploadCommandDict[uploadService],
-    testFilePath: typeof data.testFilePath === "string" ? data.testFilePath : "",
     uploadFileFormat: parseUploadFormats(
       typeof data.uploadFileFormat === "string" ? data.uploadFileFormat : DEFAULT_FORMATS,
     ),
     isDeleteSourceFile:
       typeof data.isDeleteSourceFile === "boolean" ? data.isDeleteSourceFile : false,
-    autoUploadOnSave: typeof data.autoUploadOnSave === "boolean" ? data.autoUploadOnSave : false,
+    autoUpload: typeof data.autoUpload === "boolean" ? data.autoUpload : true,
+    autoTransferRemoteImages: data.autoTransferRemoteImages === true,
+    remoteImageSkipPrefixes: Array.isArray(data.remoteImageSkipPrefixes)
+      ? data.remoteImageSkipPrefixes
+          .filter((prefix): prefix is string => typeof prefix === "string")
+          .map((prefix) => prefix.trim())
+          .filter(Boolean)
+      : [],
   };
 }
 

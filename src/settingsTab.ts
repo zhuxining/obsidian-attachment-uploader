@@ -1,7 +1,7 @@
 import { type App, type Plugin, Notice, PluginSettingTab, Setting } from "obsidian";
 
 import { t } from "./lang/helpers";
-import { uploadCommandDict } from "./services/presets";
+import { uploadCommandDict } from "./settings";
 import { isUploadServiceName, parseUploadFormats, type PluginSettings } from "./settings";
 
 interface PluginLike {
@@ -18,30 +18,19 @@ export class SettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  /**
-   * 显示设置选项卡
-   */
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-
     this.addUploadCommandSettings(containerEl);
     this.addUploadRulesSettings(containerEl);
+    this.addSkipRulesSettings(containerEl);
   }
 
-  /**
-   * 设置上传命令
-   */
   private addUploadCommandSettings(containerEl: HTMLElement): void {
-    containerEl.createEl("h2", { text: t("Upload command") });
-
+    containerEl.createEl("h2", { text: t("Upload tool") });
     new Setting(containerEl).setName(t("Upload service")).addDropdown((dropdown) =>
       dropdown
-        .addOptions({
-          uPic: "uPic",
-          Picsee: "Picsee",
-          custom: "custom",
-        })
+        .addOptions({ uPic: "uPic", Picsee: "Picsee", custom: t("Custom") })
         .setValue(this.plugin.settings.uploadService)
         .onChange(async (value) => {
           if (!isUploadServiceName(value)) return;
@@ -52,99 +41,126 @@ export class SettingTab extends PluginSettingTab {
         }),
     );
 
-    new Setting(containerEl)
-      .setName(t("Executed command"))
-      .setDesc(
-        `${t(
-          "The command is executed using the exec method of child_process. %s indicates the path of the file to be uploaded, reserve it. Extract the uploaded link from the shell output after execution reference README.md",
-        )}`,
-      )
-      .addTextArea((textArea) =>
-        textArea
-          .setValue(this.plugin.settings.uploadCommand)
-          .onChange(async (value) => {
+    if (this.plugin.settings.uploadService === "custom") {
+      new Setting(containerEl)
+        .setName(t("Executed command"))
+        .setDesc(t("Upload command instructions"))
+        .addTextArea((textArea) => {
+          textArea.setValue(this.plugin.settings.uploadCommand).onChange(async (value) => {
             this.plugin.settings.uploadCommand = value;
             await this.plugin.saveSettings();
-          })
-          .setDisabled(this.plugin.settings.uploadService !== "custom")
-          .inputEl.setAttribute("rows", "5"),
-      );
+          });
+          textArea.inputEl.setAttribute("rows", "5");
+        });
+    }
 
-    this.addTestFilePathSetting(containerEl);
-  }
-
-  /**
-   * 根据配置的上传命令，测试本地文件是否能上传成功
-   */
-  private addTestFilePathSetting(containerEl: HTMLElement): void {
-    new Setting(containerEl)
+    const details = containerEl.createEl("details");
+    details.createEl("summary", { text: t("Test upload") });
+    let testFilePath = "";
+    new Setting(details)
       .setName(t("Test file path"))
+      .setDesc(t("Testing uploads the selected file to your configured host."))
       .addText((text) =>
-        text.setValue(this.plugin.settings.testFilePath).onChange(async (value) => {
-          this.plugin.settings.testFilePath = value;
-          await this.plugin.saveSettings();
+        text.onChange((value) => {
+          testFilePath = value.trim();
         }),
       )
-      .addButton((btn) =>
-        btn.setButtonText(t("Upload test")).onClick(async () => {
-          if (!this.plugin.settings.testFilePath) {
+      .addButton((button) =>
+        button.setButtonText(t("Upload test")).onClick(async () => {
+          if (!testFilePath) {
             new Notice(t("Enter the test file path"));
             return;
           }
-          const uploadResult = await this.plugin.uploadServe(this.plugin.settings.testFilePath);
-          new Notice(
-            uploadResult.success
-              ? t("Upload successful")
-              : t("Upload failed") + uploadResult.errorMessage,
-          );
+          button.setDisabled(true);
+          try {
+            const result = await this.plugin.uploadServe(testFilePath);
+            new Notice(
+              result.success
+                ? `${t("Upload successful")}
+${result.url ?? ""}`
+                : `${t("Upload failed:")} ${result.errorMessage ?? t("Unknown error")}`,
+            );
+          } catch (error) {
+            new Notice(`${t("Upload failed:")} ${String(error)}`);
+          } finally {
+            button.setDisabled(false);
+          }
         }),
       );
   }
 
-  /**
-   * 配置上传规则，哪些格式的文件可以被上传
-   */
   private addUploadRulesSettings(containerEl: HTMLElement): void {
-    containerEl.createEl("h2", { text: t("Upload rules") });
+    containerEl.createEl("h2", { text: t("Upload behavior") });
+    const { settings } = this.plugin;
+    const autoSetting = new Setting(containerEl);
+    autoSetting
+      .setName(t("Auto upload"))
+      .setDesc(t("Automatically upload attachments when pasting or dragging files."))
+      .addToggle((toggle) =>
+        toggle.setValue(settings.autoUpload).onChange(async (value) => {
+          settings.autoUpload = value;
+          remoteSetting.setDisabled(!value);
+          await this.plugin.saveSettings();
+        }),
+      );
+    const remoteSetting = new Setting(containerEl)
+      .setName(t("Include remote images"))
+      .setDesc(t("Also transfer HTTP(S) images in pasted Markdown text."))
+      .addToggle((toggle) =>
+        toggle.setValue(settings.autoTransferRemoteImages).onChange(async (value) => {
+          settings.autoTransferRemoteImages = value;
+          await this.plugin.saveSettings();
+        }),
+      )
+      .setDisabled(!settings.autoUpload);
 
     new Setting(containerEl)
       .setName(t("Attachment format to be uploaded"))
       .setDesc(
         t(
-          "The file in the configuration format will be uploaded when the command is executed and the original address will be replaced with the network address. The format will be separated by commas.",
+          "Allowed file extensions, separated by commas or line breaks. Applies to manual and automatic uploads.",
         ),
       )
-      .addTextArea((textArea) =>
+      .addTextArea((textArea) => {
         textArea
-          .setValue(Array.from(this.plugin.settings.uploadFileFormat).join(", "))
+          .setValue(Array.from(settings.uploadFileFormat).join(", "))
           .onChange(async (value) => {
-            this.plugin.settings.uploadFileFormat = parseUploadFormats(value);
+            settings.uploadFileFormat = parseUploadFormats(value);
             await this.plugin.saveSettings();
-          })
-          .inputEl.setAttribute("rows", "4"),
-      );
-
+          });
+        textArea.inputEl.setAttribute("rows", "3");
+      });
     new Setting(containerEl)
       .setName(t("Delete local files after successful upload"))
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.isDeleteSourceFile).onChange(async (value) => {
-          this.plugin.settings.isDeleteSourceFile = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName(t("Auto upload"))
       .setDesc(
         t(
-          "When enabled, files will be automatically uploaded and replaced when pasting or dragging",
+          "Only delete vault source files after replacing links and checking remaining references.",
         ),
       )
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.autoUploadOnSave).onChange(async (value) => {
-          this.plugin.settings.autoUploadOnSave = value;
+        toggle.setValue(settings.isDeleteSourceFile).onChange(async (value) => {
+          settings.isDeleteSourceFile = value;
           await this.plugin.saveSettings();
         }),
       );
+  }
+
+  private addSkipRulesSettings(containerEl: HTMLElement): void {
+    containerEl.createEl("h2", { text: t("Skip rules") });
+    new Setting(containerEl)
+      .setName(t("Remote image URL prefixes to skip"))
+      .setDesc(t("One HTTP(S) URL prefix per line. Applies to manual and automatic transfers."))
+      .addTextArea((textArea) => {
+        textArea
+          .setValue(this.plugin.settings.remoteImageSkipPrefixes.join("\n"))
+          .onChange(async (value) => {
+            this.plugin.settings.remoteImageSkipPrefixes = value
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter(Boolean);
+            await this.plugin.saveSettings();
+          });
+        textArea.inputEl.setAttribute("rows", "4");
+      });
   }
 }
